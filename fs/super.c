@@ -295,7 +295,7 @@ void mount_root(void)
 	// 读根文件系统的超级块
 	if (!(p=read_super(ROOT_DEV)))
 		panic("Unable to mount root");
-	// 获取根文件系统的第一个inode节点，里面存的是根目录元数据
+	// 获取根文件系统的第一个inode节点，里面存的是根目录的数据
 	if (!(mi=iget(ROOT_DEV,ROOT_INO)))
 		panic("Unable to read root i-node");
 	mi->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
@@ -305,7 +305,7 @@ void mount_root(void)
 	current->pwd = mi;
 	current->root = mi;
 	free=0;
-	// 文件系统的数据块数量
+	// 文件系统的逻辑数据块数量
 	i=p->s_nzones;
 	while (-- i >= 0)
 		if (!set_bit(i&8191,p->s_zmap[i>>13]->b_data))

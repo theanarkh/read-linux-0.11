@@ -37,18 +37,19 @@
  * I don't know if we should look at just the euid or both euid and
  * uid, but that should be easily changed.
  */
+// 判断有没有mask指定的权限
 static int permission(struct m_inode * inode,int mask)
 {
 	int mode = inode->i_mode;
 
 /* special case: not even root can read/write a deleted file */
-	if (inode->i_dev && !inode->i_nlinks)
+	if (inode->i_dev && !inode->i_nlinks) // 没有被引用
 		return 0;
-	else if (current->euid==inode->i_uid)
+	else if (current->euid==inode->i_uid) // 是文件的属主则取判断属主的权限
 		mode >>= 6;
-	else if (current->egid==inode->i_gid)
+	else if (current->egid==inode->i_gid) // 判断组属性
 		mode >>= 3;
-	if (((mode & mask & 0007) == mask) || suser())
+	if (((mode & mask & 0007) == mask) || suser()) // 否则判断other的属性，是超级用户则肯定有权限
 		return 1;
 	return 0;
 }

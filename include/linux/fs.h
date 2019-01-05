@@ -137,7 +137,9 @@ struct super_block {
 	unsigned long s_max_size;
 	unsigned short s_magic;
 /* These are only in memory */
+	// 缓存inode位图的内容
 	struct buffer_head * s_imap[8];
+	// 缓存数据块位图的内容
 	struct  buffer_head * s_zmap[8];
 	unsigned short s_dev;
 	struct m_inode * s_isup;

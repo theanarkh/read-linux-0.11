@@ -36,14 +36,14 @@ static void cp_stat(struct m_inode * inode, struct stat * statbuf)
 int sys_stat(char * filename, struct stat * statbuf)
 {
 	struct m_inode * inode;
-
+	// 通过文件名找到inode，把inode的信息返回
 	if (!(inode=namei(filename)))
 		return -ENOENT;
 	cp_stat(inode,statbuf);
 	iput(inode);
 	return 0;
 }
-
+// 通过文件描述符，最终都是需要找到inode
 int sys_fstat(unsigned int fd, struct stat * statbuf)
 {
 	struct file * f;
