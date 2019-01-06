@@ -12,7 +12,7 @@
 #include <asm/system.h>
 
 int block_write(int dev, long * pos, char * buf, int count)
-{	// 算出哪一块的第几个
+{	// 算出哪一块的第几个，pos为相对硬盘数据区域的绝对偏移
 	int block = *pos >> BLOCK_SIZE_BITS;
 	int offset = *pos & (BLOCK_SIZE-1);
 	int chars;

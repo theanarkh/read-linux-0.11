@@ -25,7 +25,7 @@ int sys_utime(char * filename, struct utimbuf * times)
 {
 	struct m_inode * inode;
 	long actime,modtime;
-
+	// 更新文件的访问和修改时间，没传times则使用当前时间
 	if (!(inode=namei(filename)))
 		return -ENOENT;
 	if (times) {
@@ -85,6 +85,7 @@ int sys_chdir(const char * filename)
 		iput(inode);
 		return -ENOTDIR;
 	}
+	// 之前的已经不用
 	iput(current->pwd);
 	// 设置新的工作目录
 	current->pwd = inode;

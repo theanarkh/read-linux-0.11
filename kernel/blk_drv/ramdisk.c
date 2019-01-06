@@ -17,6 +17,7 @@
 #define MAJOR_NR 1
 #include "blk.h"
 
+// 虚拟盘的起始地址，系统启动时初始化
 char	*rd_start;
 int	rd_length = 0;
 
@@ -26,12 +27,16 @@ void do_rd_request(void)
 	char	*addr;
 
 	INIT_REQUEST;
+	// 第几个扇区，每个扇区512字节，所以addr等于扇区数*512，即左移9位	
 	addr = rd_start + (CURRENT->sector << 9);
+	// 要读写的扇区数，一个扇区512字节，所以需要读取字节数等于扇区数*512
 	len = CURRENT->nr_sectors << 9;
+	// 越界
 	if ((MINOR(CURRENT->dev) != 1) || (addr+len > rd_start+rd_length)) {
 		end_request(0);
 		goto repeat;
 	}
+	// 和内存进行数据交互
 	if (CURRENT-> cmd == WRITE) {
 		(void ) memcpy(addr,
 			      CURRENT->buffer,
@@ -43,6 +48,7 @@ void do_rd_request(void)
 	} else
 		panic("unknown ramdisk-command");
 	end_request(1);
+	// 继续处理下一个请求，repeat在blk.h的INIT_REQUEST中定义
 	goto repeat;
 }
 

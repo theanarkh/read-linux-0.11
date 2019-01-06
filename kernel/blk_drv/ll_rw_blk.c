@@ -95,6 +95,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 /* WRITEA/READA is special case - it is not really needed, so if the */
 /* buffer is locked, we just forget about it, else it's a normal read */
 	if (rw_ahead = (rw == READA || rw == WRITEA)) {
+		// 预读写的时候，buffer被锁则直接返回，因为预读本身不是必须的
 		if (bh->b_lock)
 			return;
 		if (rw == READA)
@@ -118,33 +119,40 @@ repeat:
  * we want some room for reads: they take precedence. The last third
  * of the requests are only for reads.
  */
+	// 请求队列1/3用于读，2/3用于写
 	if (rw == READ)
 		req = request+NR_REQUEST;
 	else
 		req = request+((NR_REQUEST*2)/3);
 /* find an empty request */
 	while (--req >= request)
+		// 小于0说明该结构没有被使用
 		if (req->dev<0)
 			break;
 /* if none found, sleep on new requests: check for rw_ahead */
+	// 没有找到可用的请求结构
 	if (req < request) {
+		// 预读写则直接返回
 		if (rw_ahead) {
 			unlock_buffer(bh);
 			return;
 		}
+		// 阻塞等待可用的请求结构
 		sleep_on(&wait_for_request);
+		// 被唤醒后重新查找
 		goto repeat;
 	}
 /* fill up the request-info, and add it to the queue */
 	req->dev = bh->b_dev;
 	req->cmd = rw;
 	req->errors=0;
-	req->sector = bh->b_blocknr<<1;
-	req->nr_sectors = 2;
+	req->sector = bh->b_blocknr<<1; // 一块等于两个扇区所以乘以2，即左移1位，比如要读地10块，则读取第二十个扇区
+	req->nr_sectors = 2;// 一块等于两个扇区，即读取的扇区是2
 	req->buffer = bh->b_data;
 	req->waiting = NULL;
 	req->bh = bh;
 	req->next = NULL;
+	// 插入请求队列
 	add_request(major+blk_dev,req);
 }
 
@@ -157,9 +165,10 @@ void ll_rw_block(int rw, struct buffer_head * bh)
 		printk("Trying to read nonexistent block-device\n\r");
 		return;
 	}
+	// 新建一个读写硬盘数据的请求
 	make_request(major,rw,bh);
 }
-
+// 初始化请求队列
 void blk_dev_init(void)
 {
 	int i;

@@ -109,6 +109,7 @@ extern inline void unlock_buffer(struct buffer_head * bh)
 extern inline void end_request(int uptodate)
 {
 	DEVICE_OFF(CURRENT->dev);
+	// 读写数据成功，数据有效位置1
 	if (CURRENT->bh) {
 		CURRENT->bh->b_uptodate = uptodate;
 		unlock_buffer(CURRENT->bh);
@@ -118,9 +119,11 @@ extern inline void end_request(int uptodate)
 		printk("dev %04x, block %d\n\r",CURRENT->dev,
 			CURRENT->bh->b_blocknr);
 	}
+	// 数据读写成功，唤醒阻塞队列
 	wake_up(&CURRENT->waiting);
 	wake_up(&wait_for_request);
 	CURRENT->dev = -1;
+	// 更新请求队列，移除当前处理完的节点
 	CURRENT = CURRENT->next;
 }
 

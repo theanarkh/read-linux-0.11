@@ -313,7 +313,9 @@ void do_hd_request(void)
 		end_request(0);
 		goto repeat;
 	}
+	// 相对扇区偏移 + 该分区的开始扇区偏移等于绝对的扇区偏移
 	block += hd[dev].start_sect;
+	// 哪个硬盘
 	dev /= 5;
 	__asm__("divl %4":"=a" (block),"=d" (sec):"0" (block),"1" (0),
 		"r" (hd_info[dev].sect));
