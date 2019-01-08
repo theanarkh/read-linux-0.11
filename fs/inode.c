@@ -11,12 +11,12 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <asm/system.h>
-
+// 系统的inode表，整个系统的所有进程共享
 struct m_inode inode_table[NR_INODE]={{0,},};
 
 static void read_inode(struct m_inode * inode);
 static void write_inode(struct m_inode * inode);
-
+// 互斥访问
 static inline void wait_on_inode(struct m_inode * inode)
 {
 	cli();
@@ -39,7 +39,7 @@ static inline void unlock_inode(struct m_inode * inode)
 	inode->i_lock=0;
 	wake_up(&inode->i_wait);
 }
-// 置dev
+// 置属于dev的inode无效
 void invalidate_inodes(int dev)
 {
 	int i;
@@ -55,12 +55,12 @@ void invalidate_inodes(int dev)
 		}
 	}
 }
-
+// 遍历所有inode，从硬盘读包括该inode的数据块，然后用内存的inode覆盖硬盘读进来的，存在buffer里，等待回写	
 void sync_inodes(void)
 {
 	int i;
 	struct m_inode * inode;
-
+		
 	inode = 0+inode_table;
 	for(i=0 ; i<NR_INODE ; i++,inode++) {
 		wait_on_inode(inode);
@@ -70,6 +70,7 @@ void sync_inodes(void)
 	}
 }
 
+// 找到inode中块号为block的块对应哪个硬盘块号或如果没有该块则在硬盘中新建一个块
 static int _bmap(struct m_inode * inode,int block,int create)
 {
 	struct buffer_head * bh;
@@ -77,7 +78,7 @@ static int _bmap(struct m_inode * inode,int block,int create)
 
 	if (block<0)
 		panic("_bmap: block<0");
-	// 文件的大小最大值
+	// 文件的大小最大值,(7+512+512*512) * 硬盘每块的大小
 	if (block >= 7+512+512*512)
 		panic("_bmap: block>big");
 	// 块号小于7则直接在i_zone数组的前面7个中找就行
@@ -87,6 +88,7 @@ static int _bmap(struct m_inode * inode,int block,int create)
 			// 保存块号
 			if (inode->i_zone[block]=new_block(inode->i_dev)) {
 				inode->i_ctime=CURRENT_TIME;
+				// 该inode需要回写硬盘
 				inode->i_dirt=1;
 			}
 		// 返回硬盘中的块号
@@ -149,12 +151,13 @@ static int _bmap(struct m_inode * inode,int block,int create)
 	brelse(bh);
 	return i;
 }
-
+// 查找inode中第block块对应硬盘的块号
 int bmap(struct m_inode * inode,int block)
 {
 	return _bmap(inode,block,0);
 }
 
+// 查找inode中的第block块对应的硬盘哪个块，如果有则返回，没有则创建，返回硬盘中的块号
 int create_block(struct m_inode * inode, int block)
 {
 	return _bmap(inode,block,1);
@@ -169,13 +172,14 @@ void iput(struct m_inode * inode)
 		panic("iput: trying to free free inode");
 	// 管道inode
 	if (inode->i_pipe) {
-		// 唤醒等待队列，因为该管道要被销毁了，不然那会使等待者无限等待
+		// 唤醒等待队列，因为该管道要被销毁了，不然那会使等待者无限等待，这句是不是可以放到if后
 		wake_up(&inode->i_wait);
 		// 还有进程在引用则先不销毁
 		if (--inode->i_count)
 			return;
 		// 释放管道对应的一页大小
 		free_page(inode->i_size);
+		// 该inode可以重用
 		inode->i_count=0;
 		inode->i_dirt=0;
 		inode->i_pipe=0;
@@ -186,19 +190,23 @@ void iput(struct m_inode * inode)
 		return;
 	}
 	if (S_ISBLK(inode->i_mode)) {
+		// 块文件，inode->i_zone[0]保存的是设备号，把buffer中属于该dev设备的回写到硬盘
 		sync_dev(inode->i_zone[0]);
 		wait_on_inode(inode);
 	}
 repeat:
+	// 还有人引用引用数减一后返回
 	if (inode->i_count>1) {
 		inode->i_count--;
 		return;
 	}
+	// 没人引用该inode，删除该inode的内容，并释放该inode
 	if (!inode->i_nlinks) {
 		truncate(inode);
 		free_inode(inode);
 		return;
 	}
+	// 需要回写硬盘，则回写
 	if (inode->i_dirt) {
 		write_inode(inode);	/* we can sleep - so do again */
 		wait_on_inode(inode);
@@ -235,6 +243,7 @@ struct m_inode * get_empty_inode(void)
 			panic("No free inodes in mem");
 		}
 		wait_on_inode(inode);
+		// 没有被引用还会有需要回写的数据？
 		while (inode->i_dirt) {
 			write_inode(inode);
 			wait_on_inode(inode);
@@ -258,6 +267,7 @@ struct m_inode * get_pipe_inode(void)
 		return NULL;
 	}
 	inode->i_count = 2;	/* sum of readers/writers */
+	// 初始化读写指针
 	PIPE_HEAD(*inode) = PIPE_TAIL(*inode) = 0;
 	// 标记该inode是管道类型
 	inode->i_pipe = 1;
@@ -302,7 +312,7 @@ struct m_inode * iget(int dev,int nr)
 				return inode;
 			}
 			iput(inode);
-			// 找到了该超级块，更新dev为该超级块的的设备号，块号为第一块
+			// 找到了该超级块，更新dev为该超级块的的设备号，块号为第一块，从新的起点开始找
 			dev = super_block[i].s_dev;
 			nr = ROOT_INO;
 			inode = inode_table;
@@ -314,6 +324,7 @@ struct m_inode * iget(int dev,int nr)
 	}
 	if (!empty)
 		return (NULL);
+	// 找不到则返回一个新的inode
 	inode=empty;
 	inode->i_dev = dev;
 	inode->i_num = nr;
@@ -344,7 +355,7 @@ static void read_inode(struct m_inode * inode)
 	unlock_inode(inode);
 }
 
-// 先把inode从硬盘中读进来，然后写入，等待回写
+// 先把inode从硬盘中读进来，然后覆盖，等待回写
 static void write_inode(struct m_inode * inode)
 {
 	struct super_block * sb;

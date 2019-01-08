@@ -27,12 +27,17 @@
 #include <asm/io.h>
 
 extern int end;
+// 内存中开辟的一块内存，end是内核代码的结束地址
 struct buffer_head * start_buffer = (struct buffer_head *) &end;
+// 哈希链表，主要是为了快速找到数据
 struct buffer_head * hash_table[NR_HASH];
+// 缓存区的结构是双向循环链表，free_list指向第一个理论上可用的节点，他的最后一个节点是最近被使用的节点
 static struct buffer_head * free_list;
+// 没有buffer可用而被阻塞的进程挂载这个队列上
 static struct task_struct * buffer_wait = NULL;
+// 一共有多少个buffer块
 int NR_BUFFERS = 0;
-
+// 加锁，互斥访问
 static inline void wait_on_buffer(struct buffer_head * bh)
 {
 	cli();
@@ -45,23 +50,26 @@ int sys_sync(void)
 {
 	int i;
 	struct buffer_head * bh;
-
+	// 把所有inode写入buffer，等待回写，见下面代码
 	sync_inodes();		/* write out inodes into buffers */
 	bh = start_buffer;
 	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
 		wait_on_buffer(bh);
 		if (bh->b_dirt)
+			// 请求底层写硬盘操作，等待底层驱动回写到硬盘，不一定立刻写入
 			ll_rw_block(WRITE,bh);
 	}
 	return 0;
 }
 
+// 把buffer中属于dev设备的缓存全部回写到硬盘
 int sync_dev(int dev)
 {
 	int i;
 	struct buffer_head * bh;
 
 	bh = start_buffer;
+	// 先把属于该dev的缓存回写硬盘
 	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
 		if (bh->b_dev != dev)
 			continue;
@@ -69,7 +77,9 @@ int sync_dev(int dev)
 		if (bh->b_dev == dev && bh->b_dirt)
 			ll_rw_block(WRITE,bh);
 	}
+	// 同步所有inode到buffer中
 	sync_inodes();
+	// 把属于该dev的buffer再写一次
 	bh = start_buffer;
 	for (i=0 ; i<NR_BUFFERS ; i++,bh++) {
 		if (bh->b_dev != dev)
@@ -80,7 +90,7 @@ int sync_dev(int dev)
 	}
 	return 0;
 }
-
+// 使属于dev的buffer全部失效
 void inline invalidate_buffers(int dev)
 {
 	int i;
@@ -124,8 +134,9 @@ void check_disk_change(int dev)
 	invalidate_inodes(dev);
 	invalidate_buffers(dev);
 }
-
+// 通过dev和block算出在哈希表的位置
 #define _hashfn(dev,block) (((unsigned)(dev^block))%NR_HASH)
+// 取得哈希链表中某条链表
 #define hash(dev,block) hash_table[_hashfn(dev,block)]
 // 把节点移出哈希链表和空闲链表
 static inline void remove_from_queues(struct buffer_head * bh)
@@ -367,7 +378,7 @@ void bread_page(unsigned long address,int dev,int b[4])
  * blocks for reading as well. End the argument list with a negative
  * number.
  */
-// 预读多个块，最后一个参数以负数结尾
+// 预读多个块，最后一个参数以负数结尾,只返回第一块的buffer指针，预读得存在buffer哈希链表里，等待以后用
 struct buffer_head * breada(int dev,int first, ...)
 {
 	va_list args;
@@ -382,18 +393,20 @@ struct buffer_head * breada(int dev,int first, ...)
 		tmp=getblk(dev,first);
 		if (tmp) {
 			if (!tmp->b_uptodate)
+				// bh应该是tmp，因为需要每次给底层传一个新的buffer结构，如果一直用bh，预读的数据会覆盖前面的数据
 				ll_rw_block(READA,bh);
 			tmp->b_count--;
 		}
 	}
 	va_end(args);
+	// 等待底层唤醒
 	wait_on_buffer(bh);
 	if (bh->b_uptodate)
 		return bh;
 	brelse(bh);
 	return (NULL);
 }
-// 
+// 系统初始化的时候执行该函数，主要是建立buffer对应的数据结构，一个双向循环链表
 void buffer_init(long buffer_end)
 {
 	struct buffer_head * h = start_buffer;
