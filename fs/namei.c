@@ -119,7 +119,7 @@ static struct buffer_head * find_entry(struct m_inode ** dir,
 		if ((*dir) == current->root)
 			namelen=1;
 		/*  如果inode在硬盘中的节点号是1说明是文件系统的根节点，
-			这时候不是回退到该根节点的上级，而是回退到挂载节点的上级
+			这时候不是回退到该根节点的上级，而是从挂载的文件系统的根节点开始找
 		*/
 		else if ((*dir)->i_num == ROOT_INO) {
 /* '..' over a mount-point results in 'dir' being exchanged for the mounted
@@ -148,7 +148,7 @@ static struct buffer_head * find_entry(struct m_inode ** dir,
 		if ((char *)de >= BLOCK_SIZE+bh->b_data) {
 			brelse(bh);
 			bh = NULL;
-			// 算出i/DIR_ENTRIES_PER_BLOCK得到当前目录项对应硬盘里的块数，然后读进来
+			// 算出i/DIR_ENTRIES_PER_BLOCK，即得到属于7+512+512*512个块中的哪一块，然后得到当前目录项对应硬盘里的块数，然后读进来
 			if (!(block = bmap(*dir,i/DIR_ENTRIES_PER_BLOCK)) ||
 			    !(bh = bread((*dir)->i_dev,block))) {
 				// 读取失败则跳过该数据块，i+DIR_ENTRIES_PER_BLOCK表示继续读取下一块数据块
@@ -222,14 +222,14 @@ static struct buffer_head * add_entry(struct m_inode * dir,
 			}
 			de = (struct dir_entry *) bh->b_data;
 		}
-		// 找到了末尾，即找到了追加entry的位置，更新大小等属性
+		// 找到了全部块的末尾，即找到了追加entry的位置，更新大小等属性
 		if (i*sizeof(struct dir_entry) >= dir->i_size) {
 			de->inode=0;
 			dir->i_size = (i+1)*sizeof(struct dir_entry);
 			dir->i_dirt = 1;
 			dir->i_ctime = CURRENT_TIME;
 		}
-		// 找到第一项还没使用的目录项
+		// 在每一块中找第一项还没使用的目录项
 		if (!de->inode) {
 			dir->i_mtime = CURRENT_TIME;
 			for (i=0; i < NAME_LEN ; i++)

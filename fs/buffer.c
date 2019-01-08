@@ -404,7 +404,7 @@ void buffer_init(long buffer_end)
 		b = (void *) (640*1024);
 	else
 		b = (void *) buffer_end;
-	// buffer_head在头部分配，dat字段对应的内容在末端分配，data字段的地址和buffer_head结构的地址要相差至少一个struct buffer_head
+	// buffer_head在头部分配，data字段对应的内容在末端分配，data字段的地址和buffer_head结构的地址要相差至少一个struct buffer_head
 	while ( (b -= BLOCK_SIZE) >= ((void *) (h+1)) ) {
 		h->b_dev = 0;
 		h->b_dirt = 0;
