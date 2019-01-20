@@ -50,6 +50,7 @@ int sys_access(const char * filename,int mode)
 	int res, i_mode;
 
 	mode &= 0007;
+	// 根据路径找到文件的inode节点
 	if (!(inode=namei(filename)))
 		return -EACCES;
 	i_mode = res = inode->i_mode & 0777;
@@ -142,7 +143,7 @@ int sys_chown(const char * filename,int uid,int gid)
 	iput(inode);
 	return 0;
 }
-
+// 打开一个文件即首先找到文件对应的inode，然后建立起文件描述符->file结构体->inode的关联
 int sys_open(const char * filename,int flag,int mode)
 {
 	struct m_inode * inode;
@@ -166,13 +167,14 @@ int sys_open(const char * filename,int flag,int mode)
 		return -EINVAL;
 	// 引用数加一
 	(current->filp[fd]=f)->f_count++;
-	// inode为文件对应的inode节点
+	// 找到文件对应的inode节点，inode为文件对应的inode节点
 	if ((i=open_namei(filename,flag,mode,&inode))<0) {
 		current->filp[fd]=NULL;
 		f->f_count=0;
 		return i;
 	}
 /* ttys are somewhat special (ttyxx major==4, tty major==5) */
+	// 会话、终端，进程首领相关的，不是很清楚
 	if (S_ISCHR(inode->i_mode))
 		if (MAJOR(inode->i_zone[0])==4) {
 			// 
@@ -201,8 +203,8 @@ int sys_open(const char * filename,int flag,int mode)
 int sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_TRUNC, mode);
-}
 
+// 解除文件描述符->file结构体->inode的关联
 int sys_close(unsigned int fd)
 {	
 	struct file * filp;
@@ -218,6 +220,7 @@ int sys_close(unsigned int fd)
 	// 还有其他进程或描述符在使用该结构
 	if (--filp->f_count)
 		return (0);
+	// 没有进程使用了则释放该inode或需要回写到硬盘
 	iput(filp->f_inode);
 	return (0);
 }

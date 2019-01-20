@@ -24,6 +24,7 @@ register int __res __asm__("ax"); \
 __asm__("bt %2,%3;setb %%al":"=a" (__res):"a" (0),"r" (bitnr),"m" (*(addr))); \
 __res; })
 
+// 保存所有的文件系统超级块
 struct super_block super_block[NR_SUPER];
 /* this is initialized in init/main.c */
 int ROOT_DEV = 0;
@@ -270,6 +271,7 @@ int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 	return 0;			/* we do that in umount */
 }
 
+// 系统初始化时挂载根文件系统
 void mount_root(void)
 {
 	int i,free;

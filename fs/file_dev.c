@@ -69,7 +69,7 @@ int file_write(struct m_inode * inode, struct file * filp, char * buf, int count
 		pos = filp->f_pos;
 	// i为已经写入的长度，count为需要写入的长度
 	while (i<count) {
-		// 创建一个块，即标记硬盘中这个块已经被使用
+		// 读取一个硬盘的数据块，如果没有则创建一个块，即标记硬盘中这个块已经被使用
 		if (!(block = create_block(inode,pos/BLOCK_SIZE)))
 			break;
 		// 然后根据返回的块号把这个块内容读进来

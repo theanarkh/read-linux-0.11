@@ -47,7 +47,7 @@ static void free_dind(int dev,int block)
 	}
 	free_block(dev,block);
 }
-
+// 清空文件
 void truncate(struct m_inode * inode)
 {
 	int i;

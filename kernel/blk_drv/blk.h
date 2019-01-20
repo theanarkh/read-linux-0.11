@@ -106,6 +106,7 @@ extern inline void unlock_buffer(struct buffer_head * bh)
 	wake_up(&bh->b_wait);
 }
 
+// 数据读写完后执行该函数
 extern inline void end_request(int uptodate)
 {
 	DEVICE_OFF(CURRENT->dev);
