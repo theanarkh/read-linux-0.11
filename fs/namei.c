@@ -817,7 +817,7 @@ int sys_link(const char * oldname, const char * newname)
 		return -ENOSPC;
 	}
 	de->inode = oldinode->i_num;
-	bh->b_dirt = 1;
+	bh->b_dirt = 1;	
 	brelse(bh);
 	iput(dir);
 	oldinode->i_nlinks++;

@@ -20,7 +20,7 @@
 // 虚拟盘的起始地址，系统启动时初始化
 char	*rd_start;
 int	rd_length = 0;
-
+// 请求虚拟盘时的处理函数
 void do_rd_request(void)
 {
 	int	len;
@@ -55,6 +55,7 @@ void do_rd_request(void)
 /*
  * Returns amount of memory which needs to be reserved.
  */
+// 操作系统初始化的时候执行，mem_start是在高速缓存后面
 long rd_init(long mem_start, int length)
 {
 	int	i;

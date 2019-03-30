@@ -109,7 +109,7 @@ int sys_pipe(unsigned long * fildes)
 	// 只有一个则释放
 	if (j==1)
 		current->filp[fd[0]]=NULL;
-	// 是否file结构
+	// 释放file结构
 	if (j<2) {
 		f[0]->f_count=f[1]->f_count=0;
 		return -1;
@@ -123,7 +123,7 @@ int sys_pipe(unsigned long * fildes)
 	}
 	// 利用这个inode进行通信
 	f[0]->f_inode = f[1]->f_inode = inode;
-	f[0]->f_pos = f[1]->f_pos = 0;
+	f[0]->f_pos = f[1]->f_pos = 0;	
 	f[0]->f_mode = 1;		/* read */
 	f[1]->f_mode = 2;		/* write */
 	put_fs_long(fd[0],0+fildes);
