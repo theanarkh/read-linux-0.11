@@ -1,6 +1,6 @@
 #ifndef _HEAD_H
 #define _HEAD_H
-
+// 段描述符结构体，8个字节
 typedef struct desc_struct {
 	unsigned long a,b;
 } desc_table[256];

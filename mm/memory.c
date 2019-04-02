@@ -63,7 +63,11 @@ static unsigned char mem_map [ PAGING_PAGES ] = {0,};
 unsigned long get_free_page(void)
 {
 register unsigned long __res asm("ax");
-
+/*
+	清方向，查找和al(0)相等的项，scab是以ecx为循环次数，
+	edi为首地址开始循环对比。知道找到等于0或ecx为0结束循环。
+	找到的话CF等于1。jne 1f说明cf等于0的时候跳到标签1处，即找不到
+*/
 __asm__("std ; repne ; scasb\n\t"
 	"jne 1f\n\t"
 	"movb $1,1(%%edi)\n\t"
@@ -170,7 +174,7 @@ int free_page_tables(unsigned long from,unsigned long size)
  * 1 Mb-range, so the pages can be shared with the kernel. Thus the
  * special case for nr=xxxx.
  */
-// 把from虚拟地址开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
+// 把线性地址from开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
 int copy_page_tables(unsigned long from,unsigned long to,long size)
 {
 	unsigned long * from_page_table;
@@ -242,7 +246,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
  * out of memory (either when trying to access page-table or
  * page.)
  */
-// page是物理地址，address是虚拟地址。建立物理地址和虚拟地址的关联，即给页表和页目录项赋值
+// page是物理地址，address是线性地址。建立物理地址和线性地址的关联，即给页表和页目录项赋值
 unsigned long put_page(unsigned long page,unsigned long address)
 {
 	unsigned long tmp, *page_table;
@@ -274,7 +278,7 @@ unsigned long put_page(unsigned long page,unsigned long address)
 	*/
 	page_table[(address>>12) & 0x3ff] = page | 7;
 /* no need for invalidate */
-	// 返回虚拟地址
+	// 返回线性地址
 	return page;
 }
 // 共享的页面被写入的时候会执行该函数。该函数申请新的一页物理地址，解除共享状态
@@ -319,7 +323,7 @@ void do_wp_page(unsigned long error_code,unsigned long address)
 		do_exit(SIGSEGV);
 #endif
 	/*
-		address为虚拟地址，
+		address为线性地址，
 		address>>10 = address>>12<<2，得到页表项的地址，
 		address>>20 = address>>22<<2，得到页目录项地址，
 		页目录项里存着页表地址+页表偏移得到页表项地址
@@ -329,7 +333,7 @@ void do_wp_page(unsigned long error_code,unsigned long address)
 		*((unsigned long *) ((address>>20) &0xffc)))));
 
 }
-// address是虚拟地址
+// address是线性地址
 void write_verify(unsigned long address)
 {
 	unsigned long page;
@@ -362,7 +366,7 @@ void get_empty_page(unsigned long address)
  * NOTE! This assumes we have checked that p != current, and that they
  * share the same executable.
  */
-// address是发生缺页的物理地址的页首地址到start_code的偏移
+
 static int try_to_share(unsigned long address, struct task_struct * p)
 {
 	unsigned long from;
@@ -370,40 +374,59 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	unsigned long from_page;
 	unsigned long to_page;
 	unsigned long phys_addr;
-	// 页目录项地址
+	/*
+		address是距离start_code的偏移。这里算出偏移在页目录里的偏移，
+		然后加上start_code的偏移就得到address在页目录里的绝对偏移
+	*/
 	from_page = to_page = ((address>>20) & 0xffc);
-	// p进程的代码开始地址（虚拟地址），取得p进程的页目录项偏移
+	// p进程的代码开始地址（线性地址），取得p进程的页目录项地址
 	from_page += ((p->start_code>>20) & 0xffc);
-	// 取得当前进程的页目录项偏移
+	// 取得当前进程的页目录项地址
 	to_page += ((current->start_code>>20) & 0xffc);
 /* is there a page-directory at from? */
-	// from
+	// from是页表的地址和标记位
 	from = *(unsigned long *) from_page;
+	// 没有指向有效的页表则返回
 	if (!(from & 1))
 		return 0;
+	// 取出页表地址
 	from &= 0xfffff000;
+	// 算出address对应的页表项地址
 	from_page = from + ((address>>10) & 0xffc);
+	// 页表项的内容，包括物理地址和标记位信息
 	phys_addr = *(unsigned long *) from_page;
 /* is the page clean and present? */
+	// 是否有效和是否是脏的，如果不是有效并且干净的则返回
 	if ((phys_addr & 0x41) != 0x01)
 		return 0;
+	// 取出物理地址的页首地址
 	phys_addr &= 0xfffff000;
 	if (phys_addr >= HIGH_MEMORY || phys_addr < LOW_MEM)
 		return 0;
+	// 目的页目录项内容
 	to = *(unsigned long *) to_page;
+	// 目的页目录项是否指向有效的页表
 	if (!(to & 1))
+		// 没有则新分配一页，并初始化标记位
 		if (to = get_free_page())
 			*(unsigned long *) to_page = to | 7;
 		else
 			oom();
+	// 取得页表地址
 	to &= 0xfffff000;
+	// 取得address对应的页表项地址
 	to_page = to + ((address>>10) & 0xffc);
+	// 是否指向了有效的物理页
 	if (1 & *(unsigned long *) to_page)
 		panic("try_to_share: to_page already exists");
 /* share them: write-protect */
+	// 标记位不可写
 	*(unsigned long *) from_page &= ~2;
+	// 把address对应的源页表项内容复制到目的页表项中
 	*(unsigned long *) to_page = *(unsigned long *) from_page;
+	// 使tlb失效
 	invalidate();
+	// 算出页数，引用数加一
 	phys_addr -= LOW_MEM;
 	phys_addr >>= 12;
 	mem_map[phys_addr]++;
@@ -446,7 +469,7 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	unsigned long tmp;
 	unsigned long page;
 	int block,i;
-	// 取得虚拟地址对应的页首地址 
+	// 取得线性地址对应的页首地址 
 	address &= 0xfffff000;
 	// 算出离代码段偏移
 	tmp = address - current->start_code;
@@ -485,11 +508,15 @@ void mem_init(long start_mem, long end_mem)
 	int i;
 
 	HIGH_MEMORY = end_mem;
+	// 置全部页面为已使用
 	for (i=0 ; i<PAGING_PAGES ; i++)
 		mem_map[i] = USED;
+	// 主存首地址对应的索引
 	i = MAP_NR(start_mem);
+	// 主存的页数
 	end_mem -= start_mem;
 	end_mem >>= 12;
+	// 把主存的页置为未使用
 	while (end_mem-->0)
 		mem_map[i++]=0;
 }
@@ -498,7 +525,6 @@ void calc_mem(void)
 {
 	int i,j,k,free=0;
 	long * pg_tbl;
-
 	for(i=0 ; i<PAGING_PAGES ; i++)
 		if (!mem_map[i]) free++;
 	printk("%d pages free (of %d)\n\r",free,PAGING_PAGES);

@@ -152,7 +152,9 @@ extern void wake_up(struct task_struct ** p);
  */
 #define FIRST_TSS_ENTRY 4
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
+// 第一个tss选择子的偏移是4<<3，4乘以8，等于32，即从GDT的偏移为32开始算，第一个进程的n是0，tss是32
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
+// 第一个ldt选择子的偏移是5<<3，5乘以8，等于40，即从GDT的偏移为40开始算，第一个进程的n是0，ldt是40
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
 #define ltr(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
 #define lldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
@@ -215,9 +217,12 @@ __asm__("movw %%dx,%0\n\t" \
 unsigned long __base; \
 __asm__("movb %3,%%dh\n\t" \
 	"movb %2,%%dl\n\t" \
+	// edx=edx左移16位
 	"shll $16,%%edx\n\t" \
 	"movw %1,%%dx" \
+	// edx寄存器的值写到__base
 	:"=d" (__base) \
+	// 输入
 	:"m" (*((addr)+2)), \
 	 "m" (*((addr)+4)), \
 	 "m" (*((addr)+7))); \
@@ -225,6 +230,7 @@ __base;})
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
+// 加载段限长，把segment对应的段描述符中的段界限字段加载到limit
 #define get_limit(segment) ({ \
 unsigned long __limit; \
 __asm__("lsll %1,%0\n\tincl %0":"=r" (__limit):"r" (segment)); \

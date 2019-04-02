@@ -44,6 +44,7 @@ ROOT_DEV = 0x306
 
 entry start
 start:
+	// 把setup的代码复制到0x9000，256字节
 	mov	ax,#BOOTSEG
 	mov	ds,ax
 	mov	ax,#INITSEG
@@ -52,7 +53,9 @@ start:
 	sub	si,si
 	sub	di,di
 	rep
+	// 每次传16位
 	movw
+	// 段间跳转到0x9000:go,CS = INITSEG,IP = go,即跳过前面复制代码的逻辑，go是段内偏移
 	jmpi	go,INITSEG
 go:	mov	ax,cs
 	mov	ds,ax
@@ -70,6 +73,11 @@ load_setup:
 	mov	bx,#0x0200		! address = 512, in INITSEG
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
 	int	0x13			! read it
+	/*
+		读取硬盘的setup模块代码，jc在CF=1时跳转，jnc则在CF=0时跳转，
+		读取硬盘出错则CF=1，ah是出错码，所以下面是CF等于1，说明加载成功，则跳转，
+		否则则重试
+	*/
 	jnc	ok_load_setup		! ok - continue
 	mov	dx,#0x0000
 	mov	ax,#0x0000		! reset the diskette
