@@ -35,14 +35,16 @@ static inline volatile void oom(void)
 	printk("out of memory\n\r");
 	do_exit(SIGSEGV);
 }
-// 置cr3为0，把0赋给eax，eax赋给cr3，cr3是保存页目录
+// 置cr3为0，把0赋给eax，eax赋给cr3，cr3是保存页目录基地址的
 #define invalidate() \
 __asm__("movl %%eax,%%cr3"::"a" (0))
 
 /* these are not to be changed without changing head.s etc */
 #define LOW_MEM 0x100000
 #define PAGING_MEMORY (15*1024*1024)
+// 多少页，>>12即除以4kb
 #define PAGING_PAGES (PAGING_MEMORY>>12)
+// 给定一个地址，算出在哪一页
 #define MAP_NR(addr) (((addr)-LOW_MEM)>>12)
 #define USED 100
 
@@ -66,7 +68,8 @@ register unsigned long __res asm("ax");
 /*
 	清方向，查找和al(0)相等的项，scab是以ecx为循环次数，
 	edi为首地址开始循环对比。知道找到等于0或ecx为0结束循环。
-	找到的话CF等于1。jne 1f说明cf等于0的时候跳到标签1处，即找不到
+	找到的话CF等于1。jne 1f说明cf等于0的时候跳到标签1处，即找不到，
+	找到后对一页的内容清0
 */
 __asm__("std ; repne ; scasb\n\t"
 	"jne 1f\n\t"
@@ -79,8 +82,10 @@ __asm__("std ; repne ; scasb\n\t"
 	"rep ; stosl\n\t"
 	"movl %%edx,%%eax\n"
 	"1:"
+	// a即eax，是输入也是输出，输入时值是0，输出时把eax赋给__res
 	:"=a" (__res)
-	:"0" (0),"i" (LOW_MEM),"c" (PAGING_PAGES),
+	:"0" (0),"i" (LOW_MEM),"c" (PAGING_PAGES),// c即ecx，最多遍历的次数
+	// D是edi，即从后往前遍历
 	"D" (mem_map+PAGING_PAGES-1)
 	:"di","cx","dx");
 return __res;
@@ -90,7 +95,7 @@ return __res;
  * Free a page of memory at physical address 'addr'. Used by
  * 'free_page_tables()'
  */
-// addr：要释放的地址
+// addr：要释放的物理地址，修改标记位即可，再次分配的时候会清0
 void free_page(unsigned long addr)
 {
 	if (addr < LOW_MEM) return;
@@ -110,7 +115,7 @@ void free_page(unsigned long addr)
  * This function frees a continuos block of page tables, as needed
  * by 'exit()'. As does copy_page_tables(), this handles only 4Mb blocks.
  */
-// 释放from开始，连续的n个大小为4MB的页面对应的物理地址。最后释放页表、页目录项
+// from是线性地址。释放from开始，连续的n个大小为4MB的页面对应的物理地址。最后释放页表、页目录项
 int free_page_tables(unsigned long from,unsigned long size)
 {
 	unsigned long *pg_table;

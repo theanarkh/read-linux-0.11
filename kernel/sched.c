@@ -263,6 +263,7 @@ void do_floppy_timer(void)
 
 #define TIME_REQUESTS 64
 
+// 定时器数组，其实是个链表
 static struct timer_list {
 	long jiffies;
 	void (*fn)();
@@ -275,29 +276,62 @@ void add_timer(long jiffies, void (*fn)(void))
 
 	if (!fn)
 		return;
+	// 关中断，防止多个进程”同时“操作
 	cli();
+	// 直接到期，直接执行回调
 	if (jiffies <= 0)
 		(fn)();
 	else {
+		// 遍历定时器数组，找到一个空项
 		for (p = timer_list ; p < timer_list + TIME_REQUESTS ; p++)
 			if (!p->fn)
 				break;
+		// 没有空项了
 		if (p >= timer_list + TIME_REQUESTS)
 			panic("No more time requests free");
+		// 给空项赋值
 		p->fn = fn;
 		p->jiffies = jiffies;
+		// 在数组中形成链表
 		p->next = next_timer;
+		// next_timer指向第一个节点，即最早到期的
 		next_timer = p;
+		/*
+			修改链表，保证超时时间是从小到大的顺序
+			原理：
+				每个节点都是以前面一个节点的到时时间为坐标，节点里的jiffies即超时时间
+				是前一个节点到期后的多少个jiffies后该节点到期。
+		*/
 		while (p->next && p->next->jiffies < p->jiffies) {
+			// 前面的节点比后面节点大，则前面节点减去后面节点的值，算出偏移值，下面准备置换位置
 			p->jiffies -= p->next->jiffies;
+			// 先保存一下
 			fn = p->fn;
+			// 置换两个节点的回调
 			p->fn = p->next->fn;
 			p->next->fn = fn;
 			jiffies = p->jiffies;
+			// 置换两个节点是超时时间
 			p->jiffies = p->next->jiffies;
 			p->next->jiffies = jiffies;
+			/*
+				到这，第一个节点是最快到期的，还需要更新后续节点的值，其实就是找到一个合适的位置
+				插入，因为内核是用数组实现的定时器队列，所以是通过置换位置实现插入，
+				如果是链表，则直接找到合适的位置，插入即可，所谓合适的位置，
+				就是找到第一个比当前节点大的节点，插入到他前面。
+			*/
 			p = p->next;
 		}
+		/*
+			内核这里实现有个bug，当当前节点是最小时，需要更新原链表中第一个节点的值，，
+			否则会导致原链表中第一个节点的过期时间延长，修复代码如下：
+			if (p->next && p->next->jiffies > p->jiffies) {
+				p->next->jiffies = p->next->jiffies - p->jiffies;
+			}	
+			即更新原链表中第一个节点相对于新的第一个节点的偏移，剩余的节点不需要更新，因为他相对于
+			他前面的节点的偏移不变，但是原链表中的第一个节点之前前面没有节点，所以偏移就是他自己的值，
+			而现在在他前面插入了一个节点，则他的偏移是相对于前面一个节点的偏移
+		*/
 	}
 	sti();
 }
@@ -310,14 +344,16 @@ void do_timer(long cpl)
 	if (beepcount)
 		if (!--beepcount)
 			sysbeepstop();
-
+	// 当前在用户态，增加用户态的执行时间，否则增加该进程的系统执行时间
 	if (cpl)
 		current->utime++;
 	else
 		current->stime++;
-
+	// next_timer为空说明还没有定时节点
 	if (next_timer) {
+		// 第一个节点减去一个jiffies，因为其他节点都是相对第一个节点的偏移，所以其他节点的值不需要变
 		next_timer->jiffies--;
+		// 当前节点到期，如果有多个节点超时时间一样，即相对第一个节点偏移是0，则会多次进入while循环
 		while (next_timer && next_timer->jiffies <= 0) {
 			void (*fn)(void);
 			
@@ -332,6 +368,7 @@ void do_timer(long cpl)
 	if ((--current->counter)>0) return;
 	current->counter=0;
 	if (!cpl) return;
+	// 进程调度
 	schedule();
 }
 
@@ -403,9 +440,19 @@ void sched_init(void)
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
 	ltr(0);
 	lldt(0);
+	// 43是控制字端口，0x36=0x00110110,即二进制，方式3，先读写低8位再读写高8位，选择计算器0
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
+	/*
+		写入初始值，40端口是计数通道0，初始值
+		的含义是，8253每一个波动，初始值会减一，减到0则输出一个通知，
+		LATCH = (1193180/100),1193180是8253的工作频率，
+		一秒钟波动1193180次。(1193180/100)就是(1193180/1000)*10，即
+		(1193180/1000)减到0的时候，过去了1毫秒。乘以10即过去10毫秒。
+	*/
 	outb_p(LATCH & 0xff , 0x40);	/* LSB */
+	// 再写8位
 	outb(LATCH >> 8 , 0x40);	/* MSB */
+	// 设置定时中断处理函数，中断号是20,8253会触发该中断
 	set_intr_gate(0x20,&timer_interrupt);
 	outb(inb_p(0x21)&~0x01,0x21);
 	set_system_gate(0x80,&system_call);

@@ -56,7 +56,7 @@ int copy_mem(int nr,struct task_struct * p)
 	// 设置线性地址到ldt的描述符中
 	set_base(p->ldt[1],new_code_base);
 	set_base(p->ldt[2],new_data_base);
-	// 把父进程的页目录项和页表复制到子进程,old_data_base,new_data_base是线性地址
+	// 把父进程的页目录项和页表复制到子进程,old_data_base,new_data_base是线性地址,父子进程共享物理页面，即copy on write
 	if (copy_page_tables(old_data_base,new_data_base,data_limit)) {
 		free_page_tables(new_data_base,data_limit);
 		return -ENOMEM;
@@ -100,10 +100,10 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	// 页末
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
-	// 调用fork时压入栈的ip，进程创建完成会从这开始执行
+	// 调用fork时压入栈的ip，子进程创建完成会从这开始执行，即if (__res >= 0) 
 	p->tss.eip = eip;
 	p->tss.eflags = eflags;
-	// 子进程从fork返回的是0
+	// 子进程从fork返回的是0，eax会赋值给__res
 	p->tss.eax = 0;
 	p->tss.ecx = ecx;
 	p->tss.edx = edx;
@@ -128,6 +128,16 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->tss.trace_bitmap = 0x80000000;
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0"::"m" (p->tss.i387));
+	/*
+	设置线性地址范围，挂载线性地址首地址和限长到idt，赋值页目录项和页表
+	执行进程的时候，tss选择子被加载到tss寄存器，然后把tss里的上下文
+	也加载到对应的寄存器，比如cr3，ldt选择子。tss信息中的idt索引首先从gdt找到进程idt
+	结构体数据的首地址，然后根据当前段的属性，比如代码段，
+	则从cs中取得选择子，系统从idt表中取得进程线性空间
+	的首地址、限长、权限等信息。用线性地址的首地址加上ip
+	中的偏移，得到线性地址，然后再通过页目录和页表得到物理
+	地址，物理地址还没有分配则进行缺页异常等处理。
+	*/
 	if (copy_mem(nr,p)) {
 		task[nr] = NULL;
 		free_page((long) p);
@@ -144,7 +154,10 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		current->root->i_count++;
 	if (current->executable)
 		current->executable->i_count++;
-	// nr << 1即乘以2，这里算出的是第nr个进程距离第一个tss描述符地址的偏移，单位是8个字节，即选择描述符大小
+	/*
+		挂载tss和idt地址到gdt，nr << 1即乘以2，这里算出的是第nr个进程距离第一个tss描述符地址的偏移，
+		单位是8个字节，即选择描述符大小
+	*/
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));
 	p->state = TASK_RUNNING;	/* do this last, just in case */

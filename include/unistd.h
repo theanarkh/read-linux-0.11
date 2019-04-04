@@ -135,6 +135,7 @@ type name(void) \
 { \
 long __res; \
 __asm__ volatile ("int $0x80" \
+	// 输如输出都是eax，输入是系统调用函数在系统调用表的序号
 	: "=a" (__res) \
 	: "0" (__NR_##name)); \
 if (__res >= 0) \
@@ -228,7 +229,7 @@ int setpgrp(void);
 int setpgid(pid_t pid,pid_t pgid);
 int setuid(uid_t uid);
 int setgid(gid_t gid);
-void (*signal(int sig, void (*fn)(int)))(int);
+void (*(int sig, void (*fn)(int)))(int);
 int stat(const char * filename, struct stat * stat_buf);
 int fstat(int fildes, struct stat * stat_buf);
 int stime(time_t * tptr);

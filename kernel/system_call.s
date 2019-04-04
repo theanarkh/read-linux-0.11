@@ -75,47 +75,70 @@ bad_sys_call:
 .align 2
 reschedule:
 	pushl $ret_from_sys_call
+	// 执行schedule
 	jmp _schedule
 .align 2
 _system_call:
+	// 比较参数，不合法的参数直接返回中断，错误码是-1
 	cmpl $nr_system_calls-1,%eax
 	ja bad_sys_call
+	// 寄存器压栈，保存现场和用户传递的参数
 	push %ds
 	push %es
 	push %fs
+	// 执行系统调用的函数时用户传入的三个参数，右到左，ebx是第一个参数
 	pushl %edx
 	pushl %ecx		# push %ebx,%ecx,%edx as parameters
 	pushl %ebx		# to the system call
+	// 0x10是内核数据段的选择子
 	movl $0x10,%edx		# set up ds,es to kernel space
 	mov %dx,%ds
 	mov %dx,%es
 	movl $0x17,%edx		# fs points to local data space
 	mov %dx,%fs
+	// 根据参数，从系统表格里找到对应的函数，每个函数地址4个字节
 	call _sys_call_table(,%eax,4)
+	// 系统调用的返回值，压栈保存，因为下面需要用eax
 	pushl %eax
+	// 把当前进程的pcb地址赋值给eax
 	movl _current,%eax
+	// 判断当前进程状态，0是可执行，即判断当前进程是否可以继续执行
 	cmpl $0,state(%eax)		# state
+	// CMP结果为0则zf等于1，jne是cf为0则跳转，所以下面是当前进程state不为0，则跳转，即重新调度
 	jne reschedule
+	// 时间片用完则重新调度
 	cmpl $0,counter(%eax)		# counter
 	je reschedule
 ret_from_sys_call:
 	movl _current,%eax		# task[0] cannot have signals
+	// 判断当前执行的进程是不是0号进程
 	cmpl _task,%eax
+	// 是的话跳到标签3
 	je 3f
 	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
 	jne 3f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 3f
+	// 把这两个字段赋值给寄存器
 	movl signal(%eax),%ebx
 	movl blocked(%eax),%ecx
+	// 对block变量的值取反，即没有屏蔽的为变成1，表示需要处理的信号
 	notl %ecx
+	// 把收到的信号signal和没有屏蔽的信号，得到需要处理的信号，放到ecx中
 	andl %ebx,%ecx
+	// 从低位到高位扫描ecx，把等于第一个是1的位置写到ecx中，第一位是1则位置是0
 	bsfl %ecx,%ecx
+	// 没有需要处理的信号则跳转，cf=1则跳转
 	je 3f
+	
 	btrl %ecx,%ebx
+	// 处理了该信号，清0
 	movl %ebx,signal(%eax)
+	// 当前需要处理的信号加1，因为ecx保存的是位置，位置是0开始的，信号是1-32
 	incl %ecx
+	// 入参压栈
 	pushl %ecx
+	// 执行信号处理函数
 	call _do_signal
 	popl %eax
 3:	popl %eax
@@ -206,15 +229,22 @@ _sys_execve:
 
 .align 2
 _sys_fork:
+	// 执行find_empty_process函数，返回一个进程id在eax里
 	call _find_empty_process
+	// 看是否找到可用的进程id
 	testl %eax,%eax
+	// 没有找到调用标签1，即返回
 	js 1f
+	// 找到则压栈寄存器
 	push %gs
 	pushl %esi
 	pushl %edi
 	pushl %ebp
+	// 找到的进程id
 	pushl %eax
+	// 继续调函数
 	call _copy_process
+	// 出栈上面压进栈的五个寄存器，然后返回
 	addl $20,%esp
 1:	ret
 
