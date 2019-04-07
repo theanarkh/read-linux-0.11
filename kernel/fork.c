@@ -129,11 +129,11 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0"::"m" (p->tss.i387));
 	/*
-	设置线性地址范围，挂载线性地址首地址和限长到idt，赋值页目录项和页表
+	设置线性地址范围，挂载线性地址首地址和限长到ldt，赋值页目录项和页表
 	执行进程的时候，tss选择子被加载到tss寄存器，然后把tss里的上下文
-	也加载到对应的寄存器，比如cr3，ldt选择子。tss信息中的idt索引首先从gdt找到进程idt
+	也加载到对应的寄存器，比如cr3，ldt选择子。tss信息中的ldt索引首先从gdt找到进程ldt
 	结构体数据的首地址，然后根据当前段的属性，比如代码段，
-	则从cs中取得选择子，系统从idt表中取得进程线性空间
+	则从cs中取得选择子，系统从ldt表中取得进程线性空间
 	的首地址、限长、权限等信息。用线性地址的首地址加上ip
 	中的偏移，得到线性地址，然后再通过页目录和页表得到物理
 	地址，物理地址还没有分配则进行缺页异常等处理。
@@ -155,7 +155,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	if (current->executable)
 		current->executable->i_count++;
 	/*
-		挂载tss和idt地址到gdt，nr << 1即乘以2，这里算出的是第nr个进程距离第一个tss描述符地址的偏移，
+		挂载tss和ldt地址到gdt，nr << 1即乘以2，这里算出的是第nr个进程距离第一个tss描述符地址的偏移，
 		单位是8个字节，即选择描述符大小
 	*/
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));

@@ -179,7 +179,7 @@ int free_page_tables(unsigned long from,unsigned long size)
  * 1 Mb-range, so the pages can be shared with the kernel. Thus the
  * special case for nr=xxxx.
  */
-// 把线性地址from开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
+// z在fork的时候调用，复制父进程页表。把线性地址from开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
 int copy_page_tables(unsigned long from,unsigned long to,long size)
 {
 	unsigned long * from_page_table;
@@ -319,6 +319,7 @@ void un_wp_page(unsigned long * table_entry)
  *
  * If it's in code space we exit with a segment error.
  */
+
 void do_wp_page(unsigned long error_code,unsigned long address)
 {
 #if 0
@@ -338,7 +339,7 @@ void do_wp_page(unsigned long error_code,unsigned long address)
 		*((unsigned long *) ((address>>20) &0xffc)))));
 
 }
-// address是线性地址
+// address是线性地址,判断页面是否可写，不可写则新申请页面，解除共享状态
 void write_verify(unsigned long address)
 {
 	unsigned long page;
@@ -467,7 +468,7 @@ static int share_page(unsigned long address)
 	}
 	return 0;
 }
-// 缺页处理
+// 缺页处理，进程的内容还没有加载到内存，访问的时候导致缺页异常
 void do_no_page(unsigned long error_code,unsigned long address)
 {
 	int nr[4];
@@ -507,7 +508,7 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	free_page(page);
 	oom();
 }
-
+// 系统初始化的时候初始化管理内存的数据结构
 void mem_init(long start_mem, long end_mem)
 {
 	int i;

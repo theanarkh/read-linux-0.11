@@ -104,7 +104,7 @@ _system_call:
 	movl _current,%eax
 	// 判断当前进程状态，0是可执行，即判断当前进程是否可以继续执行
 	cmpl $0,state(%eax)		# state
-	// CMP结果为0则zf等于1，jne是cf为0则跳转，所以下面是当前进程state不为0，则跳转，即重新调度
+	// CMP结果为0则zf等于1，jne是zf为0则跳转，所以下面是当前进程state不为0，则跳转，即重新调度
 	jne reschedule
 	// 时间片用完则重新调度
 	cmpl $0,counter(%eax)		# counter
@@ -126,13 +126,16 @@ ret_from_sys_call:
 	notl %ecx
 	// 把收到的信号signal和没有屏蔽的信号，得到需要处理的信号，放到ecx中
 	andl %ebx,%ecx
-	// 从低位到高位扫描ecx，把等于第一个是1的位置写到ecx中，第一位是1则位置是0
+	/*
+		Bit Scan Forward,如果ecx等于0，则zf等于1，否则zf是0
+		从低位到高位扫描ecx，把等于第一个是1的位置写到ecx中，即第一位是1则位置是0
+	*/
 	bsfl %ecx,%ecx
-	// 没有需要处理的信号则跳转，cf=1则跳转
+	// zf=1即ecx是0则跳转，代表没有需要处理的信号则跳转
 	je 3f
-	
+	// 把ebx的第ecx位清0，并把1移到CF，处理了该信号，清0
 	btrl %ecx,%ebx
-	// 处理了该信号，清0
+	
 	movl %ebx,signal(%eax)
 	// 当前需要处理的信号加1，因为ecx保存的是位置，位置是0开始的，信号是1-32
 	incl %ecx

@@ -156,6 +156,10 @@ extern void wake_up(struct task_struct ** p);
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 // 第一个ldt选择子的偏移是5<<3，5乘以8，等于40，即从GDT的偏移为40开始算，第一个进程的n是0，ldt是40
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
+/*
+	加载第n个进程的tss选择子到ltr，根据选择子从GDT拿到tss的段选择符，
+	然后找到tss的内容，再把某些内容加载到相应寄存器
+*/
 #define ltr(n) __asm__("ltr %%ax"::"a" (_TSS(n)))
 #define lldt(n) __asm__("lldt %%ax"::"a" (_LDT(n)))
 #define str(n) \
@@ -172,11 +176,16 @@ __asm__("str %%ax\n\t" \
  */
 #define switch_to(n) {\
 struct {long a,b;} __tmp; \
+// ecx是第n个进程对应的pcb首地址，判断切换的下一个进程是不是就是当前执行的进程，是就不需要切换了
 __asm__("cmpl %%ecx,_current\n\t" \
 	"je 1f\n\t" \
+	// 把第n个进程的tss选择子复制到__tmp.b
 	"movw %%dx,%1\n\t" \
+	// 更新current变量，使current变量执行ecx，ecx指向task[n]
 	"xchgl %%ecx,_current\n\t" \
+	// ljmp 跟一个tss选择子实现进程切换
 	"ljmp %0\n\t" \
+	// 忽略
 	"cmpl %%ecx,_last_task_used_math\n\t" \
 	"jne 1f\n\t" \
 	"clts\n" \
@@ -186,18 +195,30 @@ __asm__("cmpl %%ecx,_current\n\t" \
 }
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
-
+/*
+	段描述符的地3,4,5,7四个字节是保存基地址
+	把edx的两个字节保存在addr+2，即第3,4位
+	edx右移16位，把低位给addr的第四个字节
+	把高位给addr的第七个字节
+*/
 #define _set_base(addr,base) \
 __asm__("movw %%dx,%0\n\t" \
 	"rorl $16,%%edx\n\t" \
 	"movb %%dl,%1\n\t" \
 	"movb %%dh,%2" \
+	// 四个输入
 	::"m" (*((addr)+2)), \
 	  "m" (*((addr)+4)), \
 	  "m" (*((addr)+7)), \
 	  "d" (base) \
 	:"dx")
-
+/*
+	段描述符的地第1,2字节和16-19位保存段限长
+	把dx的两个字节给addr的第1,2个字节，edx右移16位
+	把addr的第六个字节赋值给dh，
+	把dh的前四个比特清0，再把dh高四位复制到dl高四位，
+	dl的低四位和高四位组成新的比特顺序，把dl写回addr的第六个字节
+*/
 #define _set_limit(addr,limit) \
 __asm__("movw %%dx,%0\n\t" \
 	"rorl $16,%%edx\n\t" \
@@ -205,6 +226,7 @@ __asm__("movw %%dx,%0\n\t" \
 	"andb $0xf0,%%dh\n\t" \
 	"orb %%dh,%%dl\n\t" \
 	"movb %%dl,%1" \
+	// 三个输入
 	::"m" (*(addr)), \
 	  "m" (*((addr)+6)), \
 	  "d" (limit) \
@@ -213,6 +235,7 @@ __asm__("movw %%dx,%0\n\t" \
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
 #define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
+// 把三个字节逐个复制到__base
 #define _get_base(addr) ({\
 unsigned long __base; \
 __asm__("movb %3,%%dh\n\t" \

@@ -20,14 +20,24 @@ __asm__ ("movl %%esp,%%eax\n\t" \
 #define iret() __asm__ ("iret"::)
 
 #define _set_gate(gate_addr,type,dpl,addr) \
+// 把dx即处理函数地址的低16位赋值给ax，不影响eax的高16位
 __asm__ ("movw %%dx,%%ax\n\t" \
+	/*
+		设置idt描述符的第三个字节的内容，左移位数是字段对应的位置偏移，
+		相加后赋值给dx，共16位,edx的高16位保存了处理函数的高16位地址
+	*/
 	"movw %0,%%dx\n\t" \
+	// 把eax即0x000080000 + 处理函数的地址赋值给idt描述符的前两个字节
 	"movl %%eax,%1\n\t" \
+	// 把edx的内容写入idt描述符的第5-8个字节
 	"movl %%edx,%2" \
 	: \
 	: "i" ((short) (0x8000+(dpl<<13)+(type<<8))), \
+	// o表示使用内存地址并可以加偏移量
 	"o" (*((char *) (gate_addr))), \
+	// 指向保存选择子的首地址
 	"o" (*(4+(char *) (gate_addr))), \
+	// edx等于addr，eax等于0x00080000
 	"d" ((char *) (addr)),"a" (0x00080000))
 
 #define set_intr_gate(n,addr) \
