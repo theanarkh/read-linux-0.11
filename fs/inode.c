@@ -369,12 +369,13 @@ static void write_inode(struct m_inode * inode)
 	}
 	if (!(sb=get_super(inode->i_dev)))
 		panic("trying to write inode without device");
+	// 算出inode的块号，2 + inode位图块数 + 块位图块数 + inode的相对偏移
 	block = 2 + sb->s_imap_blocks + sb->s_zmap_blocks +
 		(inode->i_num-1)/INODES_PER_BLOCK;
 	// 读入包含该inode的整个数据块
 	if (!(bh=bread(inode->i_dev,block)))
 		panic("unable to read i-node block");
-	// 写到高速缓存等待回写到硬盘
+	// 找到数据块中inode所属的位置，写到高速缓存等待回写到硬盘
 	((struct d_inode *)bh->b_data)
 		[(inode->i_num-1)%INODES_PER_BLOCK] =
 			*(struct d_inode *)inode;

@@ -21,6 +21,7 @@
 #include <signal.h>
 
 #define _S(nr) (1<<((nr)-1))
+// 可以阻塞的信号
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 void show_task(int nr,struct task_struct * p)
@@ -107,20 +108,29 @@ void schedule(void)
 	struct task_struct ** p;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
-
+	// 处理进程的信号和状态
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p) {
+			/*
+				alarm的值是调用alarm函数设置的，见alarm函数，进程可以调用alarm函数，设置一个时间，
+				然后到期后会触发alram信号，alarm < jiffies说明过期了。设置alarm信号
+			*/
 			if ((*p)->alarm && (*p)->alarm < jiffies) {
 					(*p)->signal |= (1<<(SIGALRM-1));
 					(*p)->alarm = 0;
 				}
+			/*
+				_BLOCKABLE为可以阻塞的信号集合，blocked为当前进程设置的阻塞集合，相与
+				得到进程当前阻塞的集合，即排除进程阻塞了不能阻塞的信号，然后取反得到可以接收的
+				信号集合，再和signal相与，得到当前进程当前收到的信号。如果进程处于挂起状态，则改成可执行	
+			*/
 			if (((*p)->signal & ~(_BLOCKABLE & (*p)->blocked)) &&
 			(*p)->state==TASK_INTERRUPTIBLE)
 				(*p)->state=TASK_RUNNING;
 		}
 
 /* this is the scheduler proper: */
-
+	// 开始调度，选择合适的进程执行
 	while (1) {
 		c = -1;
 		next = 0;
@@ -129,15 +139,24 @@ void schedule(void)
 		while (--i) {
 			if (!*--p)
 				continue;
+				// 找出时间片最大的进程，说明他执行的时间最短
 			if ((*p)->state == TASK_RUNNING && (*p)->counter > c)
 				c = (*p)->counter, next = i;
 		}
+		/*
+			如果没有进程可以执行，则c等于-1，会执行进程0.如果，如果c不等于-1，
+			说明有进程可以执行，但是c可能等于0或者等于1，等于0说明，进程时间片执行完了，
+			则执行下面的代码重新计算时间片，c等于0则说明有进程可以执行，则进行切换
+		*/
 		if (c) break;
+		// 没有break说明c等于0，即所有的进程时间片已经执行完，需要重新设置
 		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 			if (*p)
+				// 优先级越高，执行的时间越长，被选中执行的机会越大
 				(*p)->counter = ((*p)->counter >> 1) +
 						(*p)->priority;
 	}
+	// 切换进程
 	switch_to(next);
 }
 
@@ -147,7 +166,7 @@ int sys_pause(void)
 	schedule();
 	return 0;
 }
-
+// 当前进程挂载到睡眠队列p中，p指向队列头指针的地址
 void sleep_on(struct task_struct **p)
 {
 	struct task_struct *tmp;
@@ -156,10 +175,22 @@ void sleep_on(struct task_struct **p)
 		return;
 	if (current == &(init_task.task))
 		panic("task[0] trying to sleep");
+	/*
+		*p为第一个睡眠节点的地址，即tmp指向第一个睡眠节点
+		头指针指向当前进程，这个版本的实现没有采用真正链表的形式，
+		他通过每个进程在栈中的临时变量形成一个链表，每个睡眠的进程，
+		在栈里有一个变量指向后面一个睡眠节点，然后把链表的头指针指向当前进程，
+		然后切换到其他进程执行，当被wake_up唤醒的时候，wake_up会唤醒链表的第一个
+		睡眠节点，因为第一个节点里保存了后面一个节点的地址，所以他唤醒后面一个节点，
+		后面一个节点以此类推，从而把整个链表的节点唤醒，这里的实现类似nginx的filter，
+		即每个模块保存后面一个节点的地址，然后把全局指针指向自己。
+	*/
 	tmp = *p;
 	*p = current;
+	// 不可中断睡眠只能通过wake_up唤醒，即使有信号也无法唤醒
 	current->state = TASK_UNINTERRUPTIBLE;
 	schedule();
+	// 唤醒后面一个节点
 	if (tmp)
 		tmp->state=0;
 }
@@ -174,17 +205,29 @@ void interruptible_sleep_on(struct task_struct **p)
 		panic("task[0] trying to sleep");
 	tmp=*p;
 	*p=current;
+/*
+	可中断地睡眠，可以通过wake_up和接收信号唤醒，不可中断的时候，
+	能保证唤醒的时候，是从前往后逐个唤醒,但是可中断睡眠无法保证这一点，
+	因为进程可能被信号唤醒了，所以需要判断全局指针是否指向了自己，即自己插入
+	链表后，还有没有进程也插入了该链表
+*/
 repeat:	current->state = TASK_INTERRUPTIBLE;
 	schedule();
+	/*
+		这里为true，说明是信号唤醒，因为wake_up能保证唤醒的是第一个节点，
+		这里先唤醒链表中比当前进程后插入链表的节点，有点奇怪，自己被信号唤醒了，
+		去唤醒别的进程，自己却还睡眠
+	*/
 	if (*p && *p != current) {
 		(**p).state=0;
 		goto repeat;
 	}
+	// 类似sleep_on的原理
 	*p=NULL;
 	if (tmp)
 		tmp->state=0;
 }
-
+// 唤醒队列中的第一个节点，并清空链表，因为第一个节点会向后唤醒其他节点
 void wake_up(struct task_struct **p)
 {
 	if (p && *p) {
@@ -378,6 +421,7 @@ int sys_alarm(long seconds)
 
 	if (old)
 		old = (old - jiffies) / HZ;
+	// 1秒等于100个jiffies
 	current->alarm = (seconds>0)?(jiffies+HZ*seconds):0;
 	return (old);
 }
@@ -411,7 +455,7 @@ int sys_getegid(void)
 {
 	return current->egid;
 }
-
+// 修改进程执行的优先级,满足条件的情况下increment越大优先权越低
 int sys_nice(long increment)
 {
 	if (current->priority-increment>0)

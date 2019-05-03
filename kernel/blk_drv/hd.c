@@ -195,6 +195,7 @@ static void hd_out(unsigned int drive,unsigned int nsect,unsigned int sect,
 		panic("Trying to write bad sector");
 	if (!controller_ready())
 		panic("HD controller not ready");
+	// 数据准备好触发中断时执行的回调，在blk.h定义,每个驱动都维护了自己的do_hd
 	do_hd = intr_addr;
 	outb_p(hd_info[drive].ctl,HD_CMD);
 	port=HD_DATA;
@@ -262,15 +263,19 @@ static void read_intr(void)
 		do_hd_request();
 		return;
 	}
+	// 从硬盘控制器的缓存读取数据
 	port_read(HD_DATA,CURRENT->buffer,256);
 	CURRENT->errors = 0;
 	CURRENT->buffer += 512;
 	CURRENT->sector++;
+	// 还有数据要读，继续注册该函数，等待中断回调
 	if (--CURRENT->nr_sectors) {
 		do_hd = &read_intr;
 		return;
 	}
+	// 结束该request，通知上层进程
 	end_request(1);
+	// 处理下一个request
 	do_hd_request();
 }
 

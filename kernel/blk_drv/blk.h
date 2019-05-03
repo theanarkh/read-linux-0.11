@@ -121,8 +121,9 @@ extern inline void end_request(int uptodate)
 		printk("dev %04x, block %d\n\r",CURRENT->dev,
 			CURRENT->bh->b_blocknr);
 	}
-	// 数据读写成功，唤醒阻塞队列
+	// 唤醒等待该request的请求，貌似暂时没有使用这个字段
 	wake_up(&CURRENT->waiting);
+	// 有request可用了 
 	wake_up(&wait_for_request);
 	CURRENT->dev = -1;
 	// 更新请求队列，移除当前处理完的节点
