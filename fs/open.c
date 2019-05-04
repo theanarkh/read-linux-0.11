@@ -211,13 +211,15 @@ int sys_close(unsigned int fd)
 
 	if (fd >= NR_OPEN)
 		return -EINVAL;
+	// 清除close_on_exec标记，该标记表示fork+exec时关闭该文件
 	current->close_on_exec &= ~(1<<fd);
 	if (!(filp = current->filp[fd]))
 		return -EINVAL;
+	// 当前进程的文件描述符指针置空
 	current->filp[fd] = NULL;
 	if (filp->f_count == 0)
 		panic("Close: file count is 0");
-	// 还有其他进程或描述符在使用该结构
+	// file结构引用数减一，非0说明还有其他进程或描述符在使用该结构，所以还不能释放file和inode
 	if (--filp->f_count)
 		return (0);
 	// 没有进程使用了则释放该inode或需要回写到硬盘

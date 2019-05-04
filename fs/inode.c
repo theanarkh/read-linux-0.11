@@ -162,29 +162,32 @@ int create_block(struct m_inode * inode, int block)
 {
 	return _bmap(inode,block,1);
 }
-		
+// 释放inode，如果没有被引用了，则销毁，否则引用数减一即可
 void iput(struct m_inode * inode)
 {
 	if (!inode)
 		return;
+	// 有进程在使用该inode则阻塞
 	wait_on_inode(inode);
+	// 没有进程引用该inode
 	if (!inode->i_count)
 		panic("iput: trying to free free inode");
 	// 管道inode
 	if (inode->i_pipe) {
-		// 唤醒等待队列，因为该管道要被销毁了，不然那会使等待者无限等待，这句是不是可以放到if后
+		// 唤醒等待队列，因为该管道可能要被销毁了，不然那会使等待者无限等待，这句是不是可以放到if后
 		wake_up(&inode->i_wait);
-		// 还有进程在引用则先不销毁
+		// 引用数减一，还有进程在引用则先不销毁
 		if (--inode->i_count)
 			return;
 		// 释放管道对应的一页大小
 		free_page(inode->i_size);
-		// 该inode可以重用
+		// 该inode可以重用，因为inode指向inode_table的元素
 		inode->i_count=0;
 		inode->i_dirt=0;
 		inode->i_pipe=0;
 		return;
 	}
+	// 没有dev说明不是硬盘文件对应的inode，不需要回写硬盘，引用数减一即可
 	if (!inode->i_dev) {
 		inode->i_count--;
 		return;
@@ -195,12 +198,12 @@ void iput(struct m_inode * inode)
 		wait_on_inode(inode);
 	}
 repeat:
-	// 还有人引用引用数减一后返回
+	// 还有进程引用该inode节点，引用数减一后返回
 	if (inode->i_count>1) {
 		inode->i_count--;
 		return;
 	}
-	// 没人引用该inode，删除该inode的内容，并释放该inode
+	// 该inode没有进程引用了，inode对应的文件也没有被其他目录项引用了，删除该inode的内容，并释放该inode
 	if (!inode->i_nlinks) {
 		truncate(inode);
 		free_inode(inode);

@@ -709,7 +709,7 @@ int sys_rmdir(const char * name)
 	iput(inode);
 	return 0;
 }
-
+// 删除硬链接
 int sys_unlink(const char * name)
 {
 	const char * basename;
@@ -717,27 +717,33 @@ int sys_unlink(const char * name)
 	struct m_inode * dir, * inode;
 	struct buffer_head * bh;
 	struct dir_entry * de;
-
+	// 找出路径的最后一级目录的inode和路径中的文件名
 	if (!(dir = dir_namei(name,&namelen,&basename)))
 		return -ENOENT;
+	// 传进来的路径是一个目录
 	if (!namelen) {
 		iput(dir);
 		return -ENOENT;
 	}
+	// 权限
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
 		return -EPERM;
 	}
+	// 找到路径对应文件的目录项
 	bh = find_entry(&dir,basename,namelen,&de);
+	// 不存在
 	if (!bh) {
 		iput(dir);
 		return -ENOENT;
 	}
+	// 读取目录项对应的inode节点
 	if (!(inode = iget(dir->i_dev, de->inode))) {
 		iput(dir);
 		brelse(bh);
 		return -ENOENT;
 	}
+	// 权限
 	if ((dir->i_mode & S_ISVTX) && !suser() &&
 	    current->euid != inode->i_uid &&
 	    current->euid != dir->i_uid) {
@@ -746,20 +752,25 @@ int sys_unlink(const char * name)
 		brelse(bh);
 		return -EPERM;
 	}
+	// 硬链接不能是目录
 	if (S_ISDIR(inode->i_mode)) {
 		iput(inode);
 		iput(dir);
 		brelse(bh);
 		return -EPERM;
 	}
+	// 没进程引用该inode
 	if (!inode->i_nlinks) {
 		printk("Deleting nonexistent file (%04x:%d), %d\n",
 			inode->i_dev,inode->i_num,inode->i_nlinks);
 		inode->i_nlinks=1;
 	}
+	// 解除了引用，inode置为0
 	de->inode = 0;
+	// 需要回写硬盘
 	bh->b_dirt = 1;
 	brelse(bh);
+	// 引用数减一，在iput中会删除引用数为0的文件
 	inode->i_nlinks--;
 	inode->i_dirt = 1;
 	inode->i_ctime = CURRENT_TIME;
@@ -767,7 +778,7 @@ int sys_unlink(const char * name)
 	iput(dir);
 	return 0;
 }
-
+// 创建硬链接
 int sys_link(const char * oldname, const char * newname)
 {
 	struct dir_entry * de;
@@ -775,53 +786,68 @@ int sys_link(const char * oldname, const char * newname)
 	struct buffer_head * bh;
 	const char * basename;
 	int namelen;
-
+	// 根据路径名找到文件的inode节点
 	oldinode=namei(oldname);
 	if (!oldinode)
 		return -ENOENT;
+	// 不能给目录创建硬链接
 	if (S_ISDIR(oldinode->i_mode)) {
+		// 不需要使用inode了，解除引用
 		iput(oldinode);
 		return -EPERM;
 	}
+	// 找出newname最后一级目录的inode和newname中的文件名
 	dir = dir_namei(newname,&namelen,&basename);
+	// 路径不存在
 	if (!dir) {
 		iput(oldinode);
 		return -EACCES;
 	}
+	// 路径是一个目录，所以文件名是空
 	if (!namelen) {
 		iput(oldinode);
 		iput(dir);
 		return -EPERM;
 	}
+	// 不能跨文件系统创建硬链接
 	if (dir->i_dev != oldinode->i_dev) {
 		iput(dir);
 		iput(oldinode);
 		return -EXDEV;
 	}
+	// 权限检验
 	if (!permission(dir,MAY_WRITE)) {
 		iput(dir);
 		iput(oldinode);
 		return -EACCES;
 	}
+	// 在目录下找文件名等于basename的项
 	bh = find_entry(&dir,basename,namelen,&de);
+	// 找到的话说明文件名已经存在，则不能再创建
 	if (bh) {
 		brelse(bh);
 		iput(dir);
 		iput(oldinode);
 		return -EEXIST;
 	}
+	// 没有则新增一个目录项，de保存找到的目录项
 	bh = add_entry(dir,basename,namelen,&de);
+	// 新增是否成功
 	if (!bh) {
 		iput(dir);
 		iput(oldinode);
 		return -ENOSPC;
 	}
+	// 硬链接的inode和旧文件的inode号一样
 	de->inode = oldinode->i_num;
+	// 新增了一项，需要回写硬盘
 	bh->b_dirt = 1;	
 	brelse(bh);
 	iput(dir);
+	// 引用数加1，创建硬链接即多了一个索引指向inode节点，所以inode引用数加一即可，为0才能删除文件
 	oldinode->i_nlinks++;
 	oldinode->i_ctime = CURRENT_TIME;
+	// inode信息有更新，需要回写硬盘
 	oldinode->i_dirt = 1;
 	iput(oldinode);
 	return 0;

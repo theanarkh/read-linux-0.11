@@ -118,7 +118,11 @@ int do_exit(long code)
 		if (task[i] && task[i]->father == current->pid) {
 			// 子进程的新父进程是进程id为1的进程
 			task[i]->father = 1;
-			// 如果子进程是僵尸进程，即已经退出，则给pid是1的进程发一个信号
+			/*
+			 如果子进程刚把自己的状态改成TASK_ZOMBIE,执行到tell_father里的代码时，时间片到了，
+			 然后调度父进程执行，这时候父进程退出了，再切换到子进程执行的时候，
+			 子进程给父进程发信号就丢失了，所以这里补充一下这个逻辑，给新的父进程发信号
+			*/
 			if (task[i]->state == TASK_ZOMBIE)
 				/* assumption task[1] is always init */
 				(void) send_sig(SIGCHLD, task[1], 1);
@@ -139,7 +143,7 @@ int do_exit(long code)
 		tty_table[current->tty].pgrp = 0;
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
-	// 是会话首进程，则通知会话里的所有进程
+	// 是会话首进程，则通知会话里的所有进程会话结束
 	if (current->leader)
 		kill_session();
 	// 更新状态
@@ -147,7 +151,7 @@ int do_exit(long code)
 	current->exit_code = code;
 	// 通知父进程
 	tell_father(current->father);
-	// 重新调度进程
+	// 重新调度进程（tell_father里已经调度过了）
 	schedule();
 	return (-1);	/* just to suppress warnings */
 }
