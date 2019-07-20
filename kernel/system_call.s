@@ -268,11 +268,14 @@ _hd_interrupt:
 	jmp 1f			# give port chance to breathe
 1:	jmp 1f
 1:	xorl %edx,%edx
+	// 把do_hd的内容和edx的交换
 	xchgl _do_hd,%edx
+	// 判断do_hd是否有效
 	testl %edx,%edx
 	jne 1f
 	movl $_unexpected_hd_interrupt,%edx
 1:	outb %al,$0x20
+	// 执行注册的回调
 	call *%edx		# "interesting" way of handling intr.
 	pop %fs
 	pop %es

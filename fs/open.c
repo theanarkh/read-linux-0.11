@@ -174,15 +174,19 @@ int sys_open(const char * filename,int flag,int mode)
 		return i;
 	}
 /* ttys are somewhat special (ttyxx major==4, tty major==5) */
-	// 会话、终端，进程首领相关的，不是很清楚
+	// 打开的是一个字符设备,终端设备，如键盘，串口等
 	if (S_ISCHR(inode->i_mode))
+		// i_zone[0]保存的是设备号，如果打开的是tty[1-63]则说明打开的是一个虚拟终端
 		if (MAJOR(inode->i_zone[0])==4) {
-			// 
+			// 当前进程是领头进程并且还没有对应的控制终端
 			if (current->leader && current->tty<0) {
+				// 领头进程打开的第一个终端成为该会话的控制终端
 				current->tty = MINOR(inode->i_zone[0]);
 				tty_table[current->tty].pgrp = current->pgrp;
 			}
+		// 打开的是进程的控制终端
 		} else if (MAJOR(inode->i_zone[0])==5)
+			// 但是进程还没有控制终端，则保存
 			if (current->tty<0) {
 				iput(inode);
 				current->filp[fd]=NULL;
@@ -195,7 +199,9 @@ int sys_open(const char * filename,int flag,int mode)
 	f->f_mode = inode->i_mode;
 	f->f_flags = flag;
 	f->f_count = 1;
+	// 指向代表文件内容的inode
 	f->f_inode = inode;
+	// 初始化文件读写指针位置是0
 	f->f_pos = 0;
 	return (fd);
 }

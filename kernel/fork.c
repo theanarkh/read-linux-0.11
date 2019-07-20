@@ -156,7 +156,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		current->executable->i_count++;
 	/*
 		挂载tss和ldt地址到gdt，nr << 1即乘以2，这里算出的是第nr个进程距离第一个tss描述符地址的偏移，
-		单位是8个字节，即选择描述符大小
+		单位是8个字节，即选择描述符大小,_LDT是偏移的大小，单位是1，这里是8
 	*/
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
 	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&(p->ldt));

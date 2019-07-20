@@ -90,7 +90,7 @@ int new_block(int dev)
 	struct buffer_head * bh;
 	struct super_block * sb;
 	int i,j;
-
+	// 获取文件系统的超级块信息
 	if (!(sb = get_super(dev)))
 		panic("trying to get new block from nonexistant device");
 	j = 8192;
@@ -148,7 +148,7 @@ void free_inode(struct m_inode * inode)
 		panic("trying to free inode on nonexistent device");
 	if (inode->i_num < 1 || inode->i_num > sb->s_ninodes)
 		panic("trying to free inode 0 or nonexistant inode");
-	// 有多个块保存这inode位图，每个块对应8192个，i_num保存的是绝对块号，除以8192取得该inode在哪个位图块中
+	// 有多个块保存着inode位图，每个块对应8192个，i_num保存的是绝对块号，除以8192取得该inode在哪个位图块中
 	if (!(bh=sb->s_imap[inode->i_num>>13]))
 		panic("nonexistent imap in superblock");
 	if (clear_bit(inode->i_num&8191,bh->b_data))

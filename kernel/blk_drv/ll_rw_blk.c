@@ -105,6 +105,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	}
 	if (rw!=READ && rw!=WRITE)
 		panic("Bad block dev command, must be R/W/RA/WA");
+	// 锁住buffer导致bread阻塞
 	lock_buffer(bh);
 	/*
 		写但数据块装载后还没有被修改过

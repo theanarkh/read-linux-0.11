@@ -20,7 +20,7 @@ struct tty_queue {
 	struct task_struct * proc_list;
 	char buf[TTY_BUF_SIZE];
 };
-
+// 操作环形队列和读写队列里数据的宏
 #define INC(a) ((a) = ((a)+1) & (TTY_BUF_SIZE-1))
 #define DEC(a) ((a) = ((a)-1) & (TTY_BUF_SIZE-1))
 #define EMPTY(a) ((a).head == (a).tail)
@@ -32,7 +32,7 @@ struct tty_queue {
 (void)({c=(queue).buf[(queue).tail];INC((queue).tail);})
 #define PUTCH(c,queue) \
 (void)({(queue).buf[(queue).head]=(c);INC((queue).head);})
-
+// 判断是不是某个字符
 #define INTR_CHAR(tty) ((tty)->termios.c_cc[VINTR])
 #define QUIT_CHAR(tty) ((tty)->termios.c_cc[VQUIT])
 #define ERASE_CHAR(tty) ((tty)->termios.c_cc[VERASE])
@@ -47,6 +47,7 @@ struct tty_struct {
 	int pgrp;
 	int stopped;
 	void (*write)(struct tty_struct * tty);
+	// 读写队列
 	struct tty_queue read_q;
 	struct tty_queue write_q;
 	struct tty_queue secondary;

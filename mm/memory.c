@@ -179,7 +179,7 @@ int free_page_tables(unsigned long from,unsigned long size)
  * 1 Mb-range, so the pages can be shared with the kernel. Thus the
  * special case for nr=xxxx.
  */
-// z在fork的时候调用，复制父进程页表。把线性地址from开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
+// 在fork的时候调用，复制父进程页表。把线性地址from开始的n个MB地址对应的页表和页目录项的内容复制给to对应的页表和页目录项
 int copy_page_tables(unsigned long from,unsigned long to,long size)
 {
 	unsigned long * from_page_table;

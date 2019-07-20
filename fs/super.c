@@ -173,7 +173,7 @@ static struct super_block * read_super(int dev)
 		free_super(s);
 		return NULL;
 	}
-	// 置第一个为已使用
+	// 第一个不能使用,置第一个为已使用,因为找空闲块的时候，返回0表示失败。所以第0块可用的话会有二义性
 	s->s_imap[0]->b_data[0] |= 1;
 	s->s_zmap[0]->b_data[0] |= 1;
 	free_super(s);
@@ -280,7 +280,7 @@ void mount_root(void)
 
 	if (32 != sizeof (struct d_inode))
 		panic("bad i-node size");
-	// 初始化file结构体列表
+	// 初始化file结构体列表，struct file file_table[NR_FILE];
 	for(i=0;i<NR_FILE;i++)
 		file_table[i].f_count=0;
 	// 如果根文件系统是软盘提示插入软盘
@@ -294,12 +294,13 @@ void mount_root(void)
 		p->s_lock = 0;
 		p->s_wait = NULL;
 	}
-	// 读根文件系统的超级块
+	// 读取某个设备（硬盘分区）中的超级块，即根文件系统的超级块
 	if (!(p=read_super(ROOT_DEV)))
 		panic("Unable to mount root");
 	// 获取根文件系统的第一个inode节点，里面存的是根目录的数据
 	if (!(mi=iget(ROOT_DEV,ROOT_INO)))
 		panic("Unable to read root i-node");
+	// mi在下面四个地方有赋值,iget里面的get_empty_inode函数已经设置i_count=1，所以这里加三就行
 	mi->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 	// 超级块挂载到了mi对应的inode节点，p->s_isup设置根文件系统的根节点
 	p->s_isup = p->s_imount = mi;
@@ -307,7 +308,7 @@ void mount_root(void)
 	current->pwd = mi;
 	current->root = mi;
 	free=0;
-	// 文件系统的逻辑数据块数量
+	// 文件系统的逻辑数据块和inode数量
 	i=p->s_nzones;
 	while (-- i >= 0)
 		if (!set_bit(i&8191,p->s_zmap[i>>13]->b_data))

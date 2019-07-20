@@ -38,6 +38,7 @@ void rs_init(void)
 {
 	set_intr_gate(0x24,rs1_interrupt);
 	set_intr_gate(0x23,rs2_interrupt);
+	// 在tty_table中定义了值
 	init(tty_table[1].read_q.data);
 	init(tty_table[2].read_q.data);
 	outb(inb_p(0x21)&0xE7,0x21);
