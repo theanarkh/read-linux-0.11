@@ -34,7 +34,7 @@ void release(struct task_struct * p)
 }
 /*
   发送信号给进程sig是发送的信号，p是接收信号的进程，priv是权限，
-  1是代表可以直接设置，比如给自己租发信息，priv为0说明需要一定的权限
+  1是代表可以直接设置，比如给自己发信息，priv为0说明需要一定的权限
 */
 static inline int send_sig(long sig,struct task_struct * p,int priv)
 {

@@ -35,9 +35,10 @@ _page_fault:
 	// zf=0则跳转，即0是写异常，1是缺页异常
 	jne 1f
 	call _do_no_page
+	// 跳到标签2
 	jmp 2f
 1:	call _do_wp_page
-// 出栈，返回中断，会重新异常指令
+// 出栈，返回中断，会重新执行异常指令
 2:	addl $8,%esp
 	pop %fs
 	pop %es

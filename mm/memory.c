@@ -263,22 +263,23 @@ unsigned long put_page(unsigned long page,unsigned long address)
 	// page对应的物理页面没有被分配则说明有问题
 	if (mem_map[(page-LOW_MEM)>>12] != 1)
 		printk("mem_map disagrees with %p at %p\n",page,address);
-	// 计算页目录项
+	// 计算页目录项的偏移地址，页目录首地址再物理地址0处。这里算出偏移地址后，就是绝对地址，与0xffc即四字节对齐
 	page_table = (unsigned long *) ((address>>20) & 0xffc);
 	// 页目录项已经指向了一个有效的页表
 	if ((*page_table)&1)
 		// 算出页表首地址，*page_table的高20位是有效地址
 		page_table = (unsigned long *) (0xfffff000 & *page_table);
 	else {
-		// 页目录项还没有指向有效的页表
+		// 页目录项还没有指向有效的页表，分配一个新的物理页
 		if (!(tmp=get_free_page()))
 			return 0;
-		// tmp为页表的物理地址，或7代表页面是用户级、可读、写、执行、有效
+		// 把页表地址写到页目录项，tmp为页表的物理地址，或7代表页面是用户级、可读、写、执行、有效
 		*page_table = tmp|7;
 		// 页目录项指向页表的物理地址
 		page_table = (unsigned long *) tmp;
 	}
-	/* address是32位，右移12为变成20位，再与3ff就是取得低10位，
+	/* 
+		address是32位，右移12为变成20位，再与3ff就是取得低10位，
 		即address在页表中的索引,或7代表该页面是用户级、可读、写、执行、有效
 	*/
 	page_table[(address>>12) & 0x3ff] = page | 7;
@@ -292,16 +293,16 @@ void un_wp_page(unsigned long * table_entry)
 	unsigned long old_page,new_page;
 	// table_entry是页表项地址，算出该页的物理首地址
 	old_page = 0xfffff000 & *table_entry;
-	// 该地址对应的页引用数为1，可以直接修改内容，置可写标记位（第二位）
+	// LOW_MEM以下是内核使用的内存。old_page对应的物理页引用数为1，可以直接修改内容，置可写标记位（第二位）
 	if (old_page >= LOW_MEM && mem_map[MAP_NR(old_page)]==1) {
 		*table_entry |= 2;
 		invalidate();
 		return;
 	}
-	// 分配一个新的页
+	// 分配一个新的物理页
 	if (!(new_page=get_free_page()))
 		oom();
-	// 页的引用数减一
+	// 页的引用数减一，因为有一个进程不使用这块内存了
 	if (old_page >= LOW_MEM)
 		mem_map[MAP_NR(old_page)]--;
 	// 修改页表项的内容，使其指向新分配的内存页，置用户级、有效、可读写、可执行标记位
@@ -372,7 +373,7 @@ void get_empty_page(unsigned long address)
  * NOTE! This assumes we have checked that p != current, and that they
  * share the same executable.
  */
-
+// 使得另一个进程的页目录和页表项指向另一个进程的正在使用的物理地址
 static int try_to_share(unsigned long address, struct task_struct * p)
 {
 	unsigned long from;
@@ -381,23 +382,23 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	unsigned long to_page;
 	unsigned long phys_addr;
 	/*
-		address是距离start_code的偏移。这里算出偏移在页目录里的偏移，
-		然后加上start_code的偏移就得到address在页目录里的绝对偏移
+		address是距离start_code的偏移。这里算出这个距离跨了多少个页目录项，
+		然后加上start_code的页目录偏移就得到address在页目录里的绝对偏移
 	*/
 	from_page = to_page = ((address>>20) & 0xffc);
-	// p进程的代码开始地址（线性地址），取得p进程的页目录项地址
+	// p进程的代码开始地址（线性地址），取得p进程的页目录项地址，再加上address算出的偏移
 	from_page += ((p->start_code>>20) & 0xffc);
-	// 取得当前进程的页目录项地址
+	// 取得当前进程的页目录项地址，页目录物理地址是0，所以这里就是该地址对应的页目录项的物理地址
 	to_page += ((current->start_code>>20) & 0xffc);
 /* is there a page-directory at from? */
-	// from是页表的地址和标记位
+	// from是页表的物理地址和标记位
 	from = *(unsigned long *) from_page;
 	// 没有指向有效的页表则返回
 	if (!(from & 1))
 		return 0;
 	// 取出页表地址
 	from &= 0xfffff000;
-	// 算出address对应的页表项地址
+	// 算出address对应的页表项地址，((address>>10) & 0xffc)算出页表项偏移，0xffc说明是4字节对齐
 	from_page = from + ((address>>10) & 0xffc);
 	// 页表项的内容，包括物理地址和标记位信息
 	phys_addr = *(unsigned long *) from_page;
@@ -422,7 +423,7 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	to &= 0xfffff000;
 	// 取得address对应的页表项地址
 	to_page = to + ((address>>10) & 0xffc);
-	// 是否指向了有效的物理页
+	// 是否指向了有效的物理页，是的话说明不需要再建立线性地址到物理地址的映射了
 	if (1 & *(unsigned long *) to_page)
 		panic("try_to_share: to_page already exists");
 /* share them: write-protect */
@@ -432,7 +433,7 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 	*(unsigned long *) to_page = *(unsigned long *) from_page;
 	// 使tlb失效
 	invalidate();
-	// 算出页数，引用数加一
+	// 算出页数，物理页引用数加一
 	phys_addr -= LOW_MEM;
 	phys_addr >>= 12;
 	mem_map[phys_addr]++;
@@ -447,12 +448,14 @@ static int try_to_share(unsigned long address, struct task_struct * p)
  * We first check if it is at all feasible by checking executable->i_count.
  * It should be >1 if there are other tasks sharing this inode.
  */
+// 判断有没有多个进程执行了同一个可执行文件
 static int share_page(unsigned long address)
 {
 	struct task_struct ** p;
 
 	if (!current->executable)
 		return 0;
+	// 只有当前进程使用这个可执行文件则返回
 	if (current->executable->i_count < 2)
 		return 0;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
@@ -475,9 +478,9 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	unsigned long tmp;
 	unsigned long page;
 	int block,i;
-	// 取得线性地址对应的页首地址 
+	// 取得线性地址对应页的页首地址,与0xfffff000即减去页偏移 
 	address &= 0xfffff000;
-	// 算出离代码段偏移
+	// 算出离代码段首地址的偏移
 	tmp = address - current->start_code;
 	// tmp大于等于end_data说明是访问堆或者栈的空间时发生的缺页,直接申请一页
 	if (!current->executable || tmp >= current->end_data) {
@@ -487,24 +490,40 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	// 是否有进程已经使用了
 	if (share_page(tmp))
 		return;
+	// 获取一页，4kb
 	if (!(page = get_free_page()))
 		oom();
 /* remember that 1 block is used for header */
-	// 算出要读的硬盘块数，但是最多读四块
+	/*
+	 算出要读的硬盘块号，但是最多读四块。
+	 tmp/BLOCK_SIZE算出线性地址对应页的
+	 页首地址离代码块距离了多少块，然后读取页首
+	 地址对应的块号，所以需要加一。比如距离2块的距离，则
+	 需要读取的块是第三块
+	*/
 	block = 1 + tmp/BLOCK_SIZE;
 	// 查找文件前4块对应的硬盘号
 	for (i=0 ; i<4 ; block++,i++)
+		// bmap算出逻辑块号对应的物理块号
 		nr[i] = bmap(current->executable,block);
-	// 从硬盘读四块数据进来
+	// 从硬盘读四块数据进来，并且复制到物理页中
 	bread_page(page,current->executable->i_dev,nr);
+	/*
+	 tmp是小于end_data的，因为从tmp开始加载了4kb的数据，
+     所以tmp+4kb（4096）后大于end_data，所以大于的部分需要清0，
+	 i即超出的字节数
+	*/
 	i = tmp + 4096 - current->end_data;
+	// page是物理页首地址，加上4kb，从后往前清0
 	tmp = page + 4096;
 	while (i-- > 0) {
 		tmp--;
 		*(char *)tmp = 0;
 	}
+	// 建立线性地址和物理地址的映射
 	if (put_page(page,address))
 		return;
+	// 失败则是否刚才申请的物理页
 	free_page(page);
 	oom();
 }

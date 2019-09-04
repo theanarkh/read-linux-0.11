@@ -378,7 +378,7 @@ void add_timer(long jiffies, void (*fn)(void))
 	}
 	sti();
 }
-
+// 定时中断处理函数
 void do_timer(long cpl)
 {
 	extern int beepcount;
@@ -402,14 +402,18 @@ void do_timer(long cpl)
 			
 			fn = next_timer->fn;
 			next_timer->fn = NULL;
+			// 下一个节点
 			next_timer = next_timer->next;
+			// 执行定时回调函数
 			(fn)();
 		}
 	}
 	if (current_DOR & 0xf0)
 		do_floppy_timer();
+	// 当前进程的可用时间减一，不为0则接着执行，否则可能需要重新调度
 	if ((--current->counter)>0) return;
 	current->counter=0;
+	// 是系统进程则继续执行
 	if (!cpl) return;
 	// 进程调度
 	schedule();
