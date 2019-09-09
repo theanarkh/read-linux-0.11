@@ -124,6 +124,7 @@ void do_signal(long signr,long eax, long ebx, long ecx, long edx,
 	put_fs_long(ecx,tmp_esp++);
 	put_fs_long(edx,tmp_esp++);
 	put_fs_long(eflags,tmp_esp++);
+	// 用户程序的地址
 	put_fs_long(old_eip,tmp_esp++);
 	// 执行该信号处理函数时屏蔽某些信号
 	current->blocked |= sa->sa_mask;

@@ -15,11 +15,13 @@
 .globl _idt,_gdt,_pg_dir,_tmp_floppy_area
 _pg_dir:
 startup_32:
+	// 选择子是0x10，即gdt的第三项，系统数据段
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
+	// 同时给一个段寄存器和一个16位通用寄存器赋值，即用_stack_start内存处的多个字节给esp和ss赋值
 	lss _stack_start,%esp
 	call setup_idt
 	call setup_gdt
@@ -121,7 +123,7 @@ pg1:
 pg2:
 
 .org 0x4000
-pg3:
+pg3:		
 
 .org 0x5000
 /*

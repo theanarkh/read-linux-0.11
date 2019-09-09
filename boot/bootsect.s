@@ -44,33 +44,60 @@ ROOT_DEV = 0x306
 
 entry start
 start:
-	// 把setup的代码复制到0x9000，256字节
+	// 把setup的代码复制到0x9000，256字节,BOOTSEG是系统代码被bios加载到的地址
 	mov	ax,#BOOTSEG
 	mov	ds,ax
+	// INITSEG是系统将自己的代码复制过去的地址
 	mov	ax,#INITSEG
 	mov	es,ax
+	// 从0x07c00复制256字节到0x90000
 	mov	cx,#256
+	// 清0，因为没有偏移
 	sub	si,si
 	sub	di,di
 	rep
 	// 每次传16位
 	movw
-	// 段间跳转到0x9000:go,CS = INITSEG,IP = go,即跳过前面复制代码的逻辑，go是段内偏移
+	// 复制完后段间跳转到0x9000:go,CS = INITSEG,IP = go,即跳过前面复制代码的逻辑，go是段内偏移
 	jmpi	go,INITSEG
+// 新的代码段和数据段基址
 go:	mov	ax,cs
 	mov	ds,ax
 	mov	es,ax
 ! put stack at 0x9ff00.
 	mov	ss,ax
+	// 即0x9000:0xFF00
 	mov	sp,#0xFF00		! arbitrary value >>512
 
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
-
+// 加载setup模块
 load_setup:
+	/*
+		bios 13号中断。对应的功能有很多，由ax传入使用哪个功能。这里使用的是功能2，读取扇区数据
+
+		AH＝功能号
+
+		AL＝扇区数
+
+		CH＝柱面
+
+		CL＝扇区
+
+		DH＝磁头
+
+		DL＝驱动器，00H~7FH：软盘；80H~0FFH：硬盘
+
+		ES:BX＝缓冲区的地址
+
+		返回：CF＝0说明操作成功，否则，AH＝错误代码
+	*/
 	mov	dx,#0x0000		! drive 0, head 0
+	// 第一个扇区存的是bootsect.s的代码，setup模块的代码在第二个扇区开始的四个扇区
 	mov	cx,#0x0002		! sector 2, track 0
+	// 读取到es:bx的地址中，es等于cs等于0x9000,即读取的地址刚好落在bootsect.s之后（0x9000:0x0200）
 	mov	bx,#0x0200		! address = 512, in INITSEG
+	// 读4个扇区
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
 	int	0x13			! read it
 	/*
@@ -79,39 +106,53 @@ load_setup:
 		否则则重试
 	*/
 	jnc	ok_load_setup		! ok - continue
+	// 驱动器是0
 	mov	dx,#0x0000
+	// 功能号0是复位磁盘
 	mov	ax,#0x0000		! reset the diskette
+	// 再次触发中断，重置磁盘
 	int	0x13
+	// 继续尝试加载
 	j	load_setup
 
+// 加载setup模块成功
 ok_load_setup:
 
 ! Get disk drive parameters, specifically nr of sectors/track
-
+	// 读取的驱动器是0，即软盘
 	mov	dl,#0x00
+	// 调用读取驱动器参数功能，即8号服务
 	mov	ax,#0x0800		! AH=8 is get drive parameters
 	int	0x13
+	// cx高位清0
 	mov	ch,#0x00
+	// 段超越，下面的一条指令段寄存器是cs，默认是ds
 	seg cs
+	// 把cx的低8位内容写到cs:sectors中，sectors见下面定义
 	mov	sectors,cx
+	// 置es为0x9000
 	mov	ax,#INITSEG
 	mov	es,ax
 
 ! Print some inane message
-
+	// 中断10的3号功能是读光标位置
 	mov	ah,#0x03		! read cursor pos
+	// 页数是0
 	xor	bh,bh
 	int	0x10
-	
+	// ch低4位是终止位置，cl的低4位是开始位置
 	mov	cx,#24
+	// 显示模式
 	mov	bx,#0x0007		! page 0, attribute 7 (normal)
+	// ES:BP字符串的段:偏移地址
 	mov	bp,#msg1
+	// ah是功能号，13是显示字符串。al是显示模式。1表示字符串只包含字符码，显示之后更新光标位置
 	mov	ax,#0x1301		! write string, move cursor
 	int	0x10
 
 ! ok, we've written the message, now
 ! we want to load the system (at 0x10000)
-
+	// 加载system模块代码
 	mov	ax,#SYSSEG
 	mov	es,ax		! segment of 0x010000
 	call	read_it
@@ -143,7 +184,7 @@ root_defined:
 ! after that (everyting loaded), we jump to
 ! the setup-routine loaded directly after
 ! the bootblock:
-
+	// 加载完setup和system模块，跳到setup模块执行
 	jmpi	0,SETUPSEG
 
 ! This routine loads the system at address 0x10000, making sure
@@ -155,18 +196,22 @@ root_defined:
 sread:	.word 1+SETUPLEN	! sectors read of current track
 head:	.word 0			! current head
 track:	.word 0			! current track
-
+// 读取system模块
 read_it:
 	mov ax,es
+	// 判断es的值，目前定义是0x1000，结果非0则有问题
 	test ax,#0x0fff
 die:	jne die			! es must be at 64kB boundary
 	xor bx,bx		! bx is starting address within segment
 rp_read:
+	// 判断是否读完了
 	mov ax,es
 	cmp ax,#ENDSEG		! have we loaded all yet?
 	jb ok1_read
 	ret
+// 读取system模块内容
 ok1_read:
+	// 段超越
 	seg cs
 	mov ax,sectors
 	sub ax,sread

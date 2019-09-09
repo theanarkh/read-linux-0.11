@@ -38,10 +38,11 @@ start:
 	mov	ah,#0x03	! read cursor pos
 	xor	bh,bh
 	int	0x10		! save it in known place, con_init fetches
+	// 把光标信息存在到0x9000:0处
 	mov	[0],dx		! it from 0x90000.
 
 ! Get memory size (extended mem, kB)
-
+	// 把内存信息存到0x9000:2处
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax
@@ -189,7 +190,9 @@ end_move:
 ! absolute address 0x00000, in 32-bit protected mode.
 
 	mov	ax,#0x0001	! protected mode (PE) bit
+	// 把ax加载进cr0(machine status word)，开启保护模式
 	lmsw	ax		! This is it!
+	// 跳过去执行，8即1000，从GDT中找描述符，权限是00，选择子是1，见下面的gdt定义
 	jmpi	0,8		! jmp offset 0 of segment 8 (cs)
 
 ! This routine checks that the keyboard command queue is empty

@@ -485,8 +485,11 @@ void sched_init(void)
 		p++;
 	}
 /* Clear NT, so that we won't have troubles with that later on */
+	// 压栈eflags寄存器到栈，修改压栈的内容，清NT位，再回写到eflags中，NT是标记当前执行的任务是否是嵌套的任务，比如通过call调用的则置1
 	__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
+	// 加载第一个任务的tss选择子到tr寄存器，然后cpu会找到GDT中的描述符，把基地址和段限长加载到tr寄存器
 	ltr(0);
+	// 加载第一个任务的ldt选择子到ldt寄存器，然后cpu会找到GDT中的描述符，把基地址和段限长加载到ldtr寄存器
 	lldt(0);
 	// 43是控制字端口，0x36=0x00110110,即二进制，方式3，先读写低8位再读写高8位，选择计算器0
 	outb_p(0x36,0x43);		/* binary, mode 3, LSB/MSB, ch 0 */
@@ -502,6 +505,7 @@ void sched_init(void)
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 	// 设置定时中断处理函数，中断号是20,8253会触发该中断
 	set_intr_gate(0x20,&timer_interrupt);
+	// 开中断
 	outb(inb_p(0x21)&~0x01,0x21);
 	set_system_gate(0x80,&system_call);
 }
