@@ -30,16 +30,22 @@ begdata:
 .bss
 begbss:
 .text
-
+// setup模块的扇区数
 SETUPLEN = 4				! nr of setup-sectors
+// bootsect模块被加载到的地址，这是bios规定的
 BOOTSEG  = 0x07c0			! original address of boot-sector
+// 把bootsect模块移到这里
 INITSEG  = 0x9000			! we move boot here - out of the way
+// bootsect模块占一个扇区，后面即0x90200,紧跟着setup模块
 SETUPSEG = 0x9020			! setup starts here
+// system模块加载到这
 SYSSEG   = 0x1000			! system loaded at 0x10000 (65536).
+// system模块的末地址，即首地址+大小
 ENDSEG   = SYSSEG + SYSSIZE		! where to stop loading
 
 ! ROOT_DEV:	0x000 - same type of floppy as boot.
 !		0x301 - first partition on first drive etc
+// 根设备，见fs.h的定义，3开头为硬盘，306是第二个硬盘的第一个分区
 ROOT_DEV = 0x306
 
 entry start
@@ -60,7 +66,7 @@ start:
 	movw
 	// 复制完后段间跳转到0x9000:go,CS = INITSEG,IP = go,即跳过前面复制代码的逻辑，go是段内偏移
 	jmpi	go,INITSEG
-// 新的代码段和数据段基址
+// 新的代码段和数据段基址，即0x9000，
 go:	mov	ax,cs
 	mov	ds,ax
 	mov	es,ax
@@ -126,9 +132,31 @@ ok_load_setup:
 	int	0x13
 	// cx高位清0
 	mov	ch,#0x00
-	// 段超越，下面的一条指令段寄存器是cs，默认是ds
+	// 段超越，下面的一条指令段寄存器是cs，默认是ds。这时候，其实cs和ds的值是一样的，都是0x9000
 	seg cs
-	// 把cx的低8位内容写到cs:sectors中，sectors见下面定义
+	/*
+	磁头数*柱面数（磁道数）*扇区数*2（两面）=总大小
+	BL:
+	= 01H — 360K
+
+	= 02H — 1.2M
+
+	= 03H — 720K
+
+	= 04H — 1.44M
+
+	CH = 柱面数的低8位
+
+	CL的位7-6 = 柱面数的高2位
+
+	CL的位5-0 = 扇区数
+
+	DH = 磁头数
+
+	DL = 驱动器数
+	 把cx的低8位内容写到cs:sectors中，sectors见下面定义，两个字节。1.44MB的软盘柱面数是80，
+	 所以cl的高两位肯定是0，因为ch已经足够保存柱面数，所以cl的值就是每柱面的扇区数，下面的代码会用
+	*/
 	mov	sectors,cx
 	// 置es为0x9000
 	mov	ax,#INITSEG
@@ -193,6 +221,7 @@ root_defined:
 !
 ! in:	es - starting address segment (normally 0x1000)
 !
+// 已经读取的扇区，1是bootsect模块，SETUPLEN是setup模块，四个扇区
 sread:	.word 1+SETUPLEN	! sectors read of current track
 head:	.word 0			! current head
 track:	.word 0			! current track
@@ -202,6 +231,7 @@ read_it:
 	// 判断es的值，目前定义是0x1000，结果非0则有问题
 	test ax,#0x0fff
 die:	jne die			! es must be at 64kB boundary
+	// 清0，组成es:bx，即0x1000:0
 	xor bx,bx		! bx is starting address within segment
 rp_read:
 	// 判断是否读完了
@@ -211,33 +241,50 @@ rp_read:
 	ret
 // 读取system模块内容
 ok1_read:
-	// 段超越
+	// 段超越,cs是0x9000
 	seg cs
+	// 每柱面的扇区数
 	mov ax,sectors
+	// 减去已经读取的五个扇区（bootsect+setup模块）
 	sub ax,sread
+	// 要读取的扇区数放到cx
 	mov cx,ax
+	// 左移9位即乘以512，扇区数*每扇区的字节数。得到总字节数
 	shl cx,#9
+	// 相加，会影响CF寄存器
 	add cx,bx
+	// CF=0,则跳转
 	jnc ok2_read
+	// 
 	je ok2_read
 	xor ax,ax
 	sub ax,bx
 	shr ax,#9
 ok2_read:
 	call read_track
+	// ax是刚才读取的扇区数
 	mov cx,ax
+	// 累加得到当前已经读取的扇区数
 	add ax,sread
 	seg cs
+	// 和每柱面的扇区数比较，看这个柱面的扇区是不是已经读取完毕
 	cmp ax,sectors
+	// 还没读完则跳到ok3_read
 	jne ok3_read
+	// 等于说明读完了一个柱面，再判断是不是读完了两个磁头
 	mov ax,#1
+	// head是0或1即两面磁头
 	sub ax,head
+	// 不等于0说明head是0，则继续读磁头1，即对面的磁头
 	jne ok4_read
+	// 等于0说明读完了该柱面的两个磁头的扇区，磁头号加一，track是轨道的意思，即磁道
 	inc track
+// 记录准备读的磁头号,已读取扇区是0，即ax清0
 ok4_read:
 	mov head,ax
 	xor ax,ax
 ok3_read:
+	// 已读取的扇区
 	mov sread,ax
 	shl cx,#9
 	add bx,cx
@@ -247,20 +294,30 @@ ok3_read:
 	mov es,ax
 	xor bx,bx
 	jmp rp_read
-
+// 读取一个柱面的所有扇区
 read_track:
+	// ax当前记录了要读取的扇区数
 	push ax
 	push bx
 	push cx
 	push dx
+	// 磁道号
 	mov dx,track
+	// 已读的扇区数
 	mov cx,sread
+	// 即将读取的扇区号
 	inc cx
+	// 磁道号
 	mov ch,dl
+	// 磁头号，0或1
 	mov dx,head
+	// dh是磁头号
 	mov dh,dl
+	// 驱动器号
 	mov dl,#0
+	// 相与，保证磁头号是0或1，即只有dh低一位是0或1
 	and dx,#0x0100
+	// 二号功能，读取扇区，al记录了要读取的扇区数
 	mov ah,#2
 	int 0x13
 	jc bad_rt
