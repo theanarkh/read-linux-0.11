@@ -237,30 +237,43 @@ rp_read:
 	// 判断是否读完了
 	mov ax,es
 	cmp ax,#ENDSEG		! have we loaded all yet?
+	/*
+		小于则跳转，根据CF判断，CF的值反映运算是否产生进位或借位。
+		如果运算结果的最高位产生一个进位或借位，则CF置1，否则置0,
+		所以cmp ax,#ENDSEG，即ax - #ENDSEG的结果如果小于0，则CF是1，则跳转，说明还没读完
+	*/
 	jb ok1_read
 	ret
-// 读取system模块内容
+// 算出需要读取的扇区数，并且判断读取完后会不会超过当前es:bx所能表示的范围，不会则开始读，否则只读所能表示的范围内的扇区数
 ok1_read:
 	// 段超越,cs是0x9000
 	seg cs
 	// 每柱面的扇区数
 	mov ax,sectors
-	// 减去已经读取的五个扇区（bootsect+setup模块）
+	// 减去已经读取扇区数，一开始的时候是五个扇区（bootsect+setup模块）
 	sub ax,sread
 	// 要读取的扇区数放到cx
 	mov cx,ax
 	// 左移9位即乘以512，扇区数*每扇区的字节数。得到总字节数
 	shl cx,#9
-	// 相加，会影响CF寄存器
+	// 相加，会影响CF寄存器。bx一开始等于0。这里先判断读取完毕后，最后一个字节地址是否超过了es:bx所能表示的范围
 	add cx,bx
-	// CF=0,则跳转
+	// jump not carry，即CF=0,则跳转，说明读取成功后，最后一个字节没有超过es:bx所能表示的范围
 	jnc ok2_read
-	// 
+	// 等于0则跳转，即zf等于1，说明读完后刚好等于当前es:bx所能表示的最大范围+1
 	je ok2_read
+	// 读取后会大于当前es:bx所能表示的范围
 	xor ax,ax
 	sub ax,bx
+	// 判断在当前es:bx可表示的范围内，还能读取多少个扇区
 	shr ax,#9
+/*
+	读取所需的扇区后，然后判断该柱面的扇区是否都读完了，
+	不是则跳到ok3_read，否则继续判断是否两个磁头都读完了，
+	不是则跳到ok4_read,否则柱面数加一，准备读下一个柱面的数据
+*/
 ok2_read:
+	// 读取某个柱面的多个扇区
 	call read_track
 	// ax是刚才读取的扇区数
 	mov cx,ax
@@ -279,33 +292,46 @@ ok2_read:
 	jne ok4_read
 	// 等于0说明读完了该柱面的两个磁头的扇区，磁头号加一，track是轨道的意思，即磁道
 	inc track
-// 记录准备读的磁头号,已读取扇区是0，即ax清0
+// 记录准备读的磁头号,ax是1，即读取一号磁头，已读取扇区是0，即ax清0
 ok4_read:
 	mov head,ax
 	xor ax,ax
+// 读取完后，更新bx的值，即下一个写入的位置
 ok3_read:
-	// 已读取的扇区
+	// 已读取的扇区，更新sread的值
 	mov sread,ax
+	// cx是刚才读取成功的扇区数
 	shl cx,#9
+	// 更新bx的值，es:bx指向的内存存放着从硬盘读取的数据
 	add bx,cx
+	// CF=0则跳转，说明还没有超过es:bx所能指向的内存范围，继续读，往es:bx继续写数据
 	jnc rp_read
+	/*
+		否则CF=1则往下走，说明刚才读取的数据超过了当前es:bx表示的范围，更新es和bx的值
+		ok3_read是由ok2_read调用的，ok2_read由ok1_read调用。但有个前提是，读取完数据后，
+		bx的大小是小于等于64kb的，所以走到这里说明是等于64kb。因为CF=1才会走到这，CF=1说明add bx cx进位了，
+		然后es执行下一个64kb的基地址。bx等于0
+	*/
 	mov ax,es
+	// es加64kb，执行下一个段基址
 	add ax,#0x1000
 	mov es,ax
+	// bx清0
 	xor bx,bx
+	// 继续读
 	jmp rp_read
-// 读取一个柱面的所有扇区
+// 读取一个柱面的多个扇区
 read_track:
 	// ax当前记录了要读取的扇区数
 	push ax
 	push bx
 	push cx
 	push dx
-	// 磁道号
+	// 磁道号，初始化是0
 	mov dx,track
 	// 已读的扇区数
 	mov cx,sread
-	// 即将读取的扇区号
+	// 加一表示即将读取的扇区号，ax的高位，即ah记录需要读取的扇区数
 	inc cx
 	// 磁道号
 	mov ch,dl
@@ -317,22 +343,26 @@ read_track:
 	mov dl,#0
 	// 相与，保证磁头号是0或1，即只有dh低一位是0或1
 	and dx,#0x0100
-	// 二号功能，读取扇区，al记录了要读取的扇区数
+	// 二号功能，读取扇区，调用中断前，al记录需要读取的扇区数，中断后，al记录了读取成功的扇区数
 	mov ah,#2
 	int 0x13
+	// CF＝0表示成功，jc是jump carry，表示进位则跳转。即CF=1时跳转，CF=1表示读取失败
 	jc bad_rt
 	pop dx
 	pop cx
 	pop bx
 	pop ax
 	ret
+// 磁盘系统复位，重新读
 bad_rt:	mov ax,#0
 	mov dx,#0
 	int 0x13
+	// 出栈
 	pop dx
 	pop cx
 	pop bx
 	pop ax
+	// 重新读
 	jmp read_track
 
 /*
