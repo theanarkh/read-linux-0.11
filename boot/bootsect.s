@@ -107,8 +107,8 @@ load_setup:
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
 	int	0x13			! read it
 	/*
-		读取硬盘的setup模块代码，jc在CF=1时跳转，jnc则在CF=0时跳转，
-		读取硬盘出错则CF=1，ah是出错码，所以下面是CF等于1，说明加载成功，则跳转，
+		读取软盘的setup模块代码，jc在CF=1时跳转，jnc则在CF=0时跳转，
+		读取软盘出错则CF=1，ah是出错码，所以下面是CF等于1，说明加载成功，则跳转，
 		否则则重试
 	*/
 	jnc	ok_load_setup		! ok - continue
@@ -192,11 +192,21 @@ ok_load_setup:
 ! on the number of sectors that the BIOS reports currently.
 
 	seg cs
+	// 根设备，本版本代码里定义为0x306
 	mov	ax,root_dev
+	// 非0说明定义了，本版本代码定义了根设备的值。为第二个硬盘的第一个分区
 	cmp	ax,#0
+	// 非0 则跳到root_defined
 	jne	root_defined
 	seg cs
+	// 每个柱面的扇区数，该信息是bois读取软盘的时得到的，然后判断软盘的类型
 	mov	bx,sectors
+	/*
+		软盘的主设备号是2，次设备号是type * 4 + n （n = 0-3）
+		1.2mb的软盘type是2，1.44mb的软盘type是7,
+		对比bios读取的信息和1.2、1.44软盘的信息，是否一样。
+		一样则更新根设备号，否则出错
+	*/
 	mov	ax,#0x0208		! /dev/ps0 - 1.2Mb
 	cmp	bx,#15
 	je	root_defined
@@ -292,7 +302,12 @@ ok2_read:
 	jne ok4_read
 	// 等于0说明读完了该柱面的两个磁头的扇区，磁头号加一，track是轨道的意思，即磁道
 	inc track
-// 记录准备读的磁头号,ax是1，即读取一号磁头，已读取扇区是0，即ax清0
+/*
+	记录准备读的磁头号,
+	如果是跳转过来的，说明ax是1，即读取一号磁头，已读取扇区是0，即ax清0，
+	如果是从inc track执行下来的，说明ax是0，即读完了两个磁头了，mov head ax，即重置磁头为0.已读扇区数为0
+	3.5英寸软盘片，其上、下两面各被划分为80个磁道，每个磁道被划分为18个扇区，每个扇区的存储容量固定为512字节。
+*/
 ok4_read:
 	mov head,ax
 	xor ax,ax
@@ -302,7 +317,7 @@ ok3_read:
 	mov sread,ax
 	// cx是刚才读取成功的扇区数
 	shl cx,#9
-	// 更新bx的值，es:bx指向的内存存放着从硬盘读取的数据
+	// 更新bx的值，es:bx指向的内存存放着从软盘读取的数据
 	add bx,cx
 	// CF=0则跳转，说明还没有超过es:bx所能指向的内存范围，继续读，往es:bx继续写数据
 	jnc rp_read
@@ -372,7 +387,9 @@ bad_rt:	mov ax,#0
  */
 kill_motor:
 	push dx
+	// 目的端口
 	mov dx,#0x3f2
+	// 写入到目的端口的值
 	mov al,#0
 	outb
 	pop dx
