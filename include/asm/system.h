@@ -1,11 +1,18 @@
 #define move_to_user_mode() \
 __asm__ ("movl %%esp,%%eax\n\t" \
+	// ss的选择子
 	"pushl $0x17\n\t" \
+	// esp的值
 	"pushl %%eax\n\t" \
+	// eflags
 	"pushfl\n\t" \
+	// cs
 	"pushl $0x0f\n\t" \
+	// ip
 	"pushl $1f\n\t" \
+	// 返回，取出上面的cs:ip执行，并且内核态变成用户态
 	"iret\n" \
+	// 重新设置选择子
 	"1:\tmovl $0x17,%%eax\n\t" \
 	"movw %%ax,%%ds\n\t" \
 	"movw %%ax,%%es\n\t" \

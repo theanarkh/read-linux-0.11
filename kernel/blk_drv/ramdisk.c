@@ -62,9 +62,12 @@ long rd_init(long mem_start, int length)
 	char	*cp;
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	// 记录虚拟盘的开始地址
 	rd_start = (char *) mem_start;
+	// 虚拟盘空间大小
 	rd_length = length;
 	cp = rd_start;
+	// 清0
 	for (i=0; i < length; i++)
 		*cp++ = '\0';
 	return(length);

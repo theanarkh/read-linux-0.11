@@ -531,17 +531,18 @@ void do_no_page(unsigned long error_code,unsigned long address)
 void mem_init(long start_mem, long end_mem)
 {
 	int i;
-
+	// 高端内存末地址
 	HIGH_MEMORY = end_mem;
 	// 置全部页面为已使用
 	for (i=0 ; i<PAGING_PAGES ; i++)
 		mem_map[i] = USED;
-	// 主存首地址对应的索引
+	// 主存首地址对应的第几页（绝对页数）
 	i = MAP_NR(start_mem);
-	// 主存的页数
+	// 主存的大小
 	end_mem -= start_mem;
+	// 主存页数
 	end_mem >>= 12;
-	// 把主存的页置为未使用
+	// 把主存的页置为未使用，end_men是页数，i是主存第一页的索引
 	while (end_mem-->0)
 		mem_map[i++]=0;
 }

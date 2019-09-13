@@ -35,10 +35,12 @@ start:
 
 	mov	ax,#INITSEG	! this is done in bootsect already, but...
 	mov	ds,ax
+	// int10 的3号功能
 	mov	ah,#0x03	! read cursor pos
+	// 清0
 	xor	bh,bh
 	int	0x10		! save it in known place, con_init fetches
-	// 把光标信息存在到0x9000:0处
+	// 把光标信息（X,Y的值）存在到0x9000:0处，数据寄存器是ds
 	mov	[0],dx		! it from 0x90000.
 
 ! Get memory size (extended mem, kB)

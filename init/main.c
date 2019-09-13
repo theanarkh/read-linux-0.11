@@ -109,8 +109,11 @@ void main(void)		/* This really IS void, no error here. */
  */
  	ROOT_DEV = ORIG_ROOT_DEV;
  	drive_info = DRIVE_INFO;
+	// 可用地址等于1M+拓展内存的大小（EXT_MEM_K KB）
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
+	// 4kb对齐
 	memory_end &= 0xfffff000;
+	// 设置内存末地址和用于缓存数据的区的末地址
 	if (memory_end > 16*1024*1024)
 		memory_end = 16*1024*1024;
 	if (memory_end > 12*1024*1024) 
@@ -119,23 +122,38 @@ void main(void)		/* This really IS void, no error here. */
 		buffer_memory_end = 2*1024*1024;
 	else
 		buffer_memory_end = 1*1024*1024;
+	// 主存开始地址
 	main_memory_start = buffer_memory_end;
+	// 有虚拟盘的话，主存地址还要往后一点
 #ifdef RAMDISK
 	main_memory_start += rd_init(main_memory_start, RAMDISK*1024);
 #endif
+	// 初始化主存
 	mem_init(main_memory_start,memory_end);
+	// 注册中断处理函数
 	trap_init();
+	// 块设备初始化
 	blk_dev_init();
+	// 字符设备初始化
 	chr_dev_init();
+	// 终端初始化
 	tty_init();
+	// 时间初始化
 	time_init();
+	// 进程调用初始化
 	sched_init();
+	// 缓存区初始化
 	buffer_init(buffer_memory_end);
+	// 硬盘初始化
 	hd_init();
+	// 软盘初始化
 	floppy_init();
+	// 关中断
 	sti();
+	// 
 	move_to_user_mode();
 	if (!fork()) {		/* we count on this going ok */
+		// 进程1执行init
 		init();
 	}
 /*
@@ -145,6 +163,7 @@ void main(void)		/* This really IS void, no error here. */
  * can run). For task0 'pause()' just means we go check if some other
  * task can run, and if not we return here.
  */
+	// 进程0继续执行这个
 	for(;;) pause();
 }
 
@@ -168,22 +187,28 @@ static char * envp[] = { "HOME=/usr/root", NULL };
 void init(void)
 {
 	int pid,i;
-
+	// 记录硬盘信息，挂载根文件系统
 	setup((void *) &drive_info);
+	// tty0指向当前终端
 	(void) open("/dev/tty0",O_RDWR,0);
+	// 获取一个大于等于0的文件描述符，即1和2，0已经被上面分配，0，1，2分别对应标准输入、输出、错误流
 	(void) dup(0);
 	(void) dup(0);
 	printf("%d buffers = %d bytes buffer space\n\r",NR_BUFFERS,
 		NR_BUFFERS*BLOCK_SIZE);
 	printf("Free mem: %d bytes\n\r",memory_end-main_memory_start);
 	if (!(pid=fork())) {
+		// 子进程关闭文件描述符0，再打开/etc/rc,即把标准输入流重定向到/etc/rc文件
 		close(0);
 		if (open("/etc/rc",O_RDONLY,0))
 			_exit(1);
+		// 指向shell
 		execve("/bin/sh",argv_rc,envp_rc);
 		_exit(2);
 	}
+	// 主进程
 	if (pid>0)
+		// 等待pid进程退出
 		while (pid != wait(&i))
 			/* nothing */;
 	while (1) {
@@ -191,15 +216,22 @@ void init(void)
 			printf("Fork failed in init\r\n");
 			continue;
 		}
+		// 子进程
 		if (!pid) {
+			// 关掉三个文件描述符
 			close(0);close(1);close(2);
+			// 建立一个会话，当前进程是会话的领头进程
 			setsid();
+			// 打开标准输入、输出、错误流
 			(void) open("/dev/tty0",O_RDWR,0);
 			(void) dup(0);
 			(void) dup(0);
+			// 
 			_exit(execve("/bin/sh",argv,envp));
 		}
+		// 父进程
 		while (1)
+			// 等待pid子进程退出
 			if (pid == wait(&i))
 				break;
 		printf("\n\rchild %d died with code %04x\n\r",pid,i);

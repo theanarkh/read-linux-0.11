@@ -170,6 +170,7 @@ int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 repeat:
 	flag=0;
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p) {
+		// 过滤不符合条件的
 		if (!*p || *p == current)
 			continue;
 		// 不是当前进程的子进程则跳过
@@ -192,6 +193,7 @@ repeat:
 		// else {
 		//	等待所有进程
 		// }
+		// 找到了一个符合条件的进程
 		switch ((*p)->state) {
 			// 子进程已经退出,这个版本没有这个状态
 			case TASK_STOPPED:
@@ -214,6 +216,7 @@ repeat:
 				continue;
 		}
 	}
+	// 还没有退出的进程
 	if (flag) {
 		// 设置了非阻塞则返回
 		if (options & WNOHANG)
@@ -226,7 +229,7 @@ repeat:
 			在schedule函数里，如果当前进程收到了信号，会变成running状态，
 			如果current->signal &= ~(1<<(SIGCHLD-1)))为0，即...0000000100000... & ...111111110111111...
 			说明当前需要处理的信号是SIGCHLD，因为signal不可能为全0，否则进程不可能被唤醒，
-			即有子进程退出，否则说明是其他信号导致了进程变成可执行状态，
+			即有子进程退出，跳到repeat找到该退出的进程，否则说明是其他信号导致了进程变成可执行状态，
 			阻塞的进程被信号唤醒，返回EINTR
 		*/
 		if (!(current->signal &= ~(1<<(SIGCHLD-1))))

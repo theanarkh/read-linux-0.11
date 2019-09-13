@@ -207,21 +207,30 @@ restart_interp:
 		goto exec_error2;
 	}
 	i = inode->i_mode;
+	// 设置了uid则执行的时候uid是设置的uid，否则是用户的有效id
 	e_uid = (i & S_ISUID) ? inode->i_uid : current->euid;
 	e_gid = (i & S_ISGID) ? inode->i_gid : current->egid;
+	// 相等说明该文件是该用户创建的，则判断user位的权限
 	if (current->euid == inode->i_uid)
 		i >>= 6;
+	// 同上，判断组权限
 	else if (current->egid == inode->i_gid)
 		i >>= 3;
+	/*
+		else 判断 other的权限
+	*/
+
 	if (!(i & 1) &&
 	    !((inode->i_mode & 0111) && suser())) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
+	// 读第一块数据进来
 	if (!(bh = bread(inode->i_dev,inode->i_zone[0]))) {
 		retval = -EACCES;
 		goto exec_error2;
 	}
+	// 前面是执行文件的头，包括一些元数据
 	ex = *((struct exec *) bh->b_data);	/* read exec-header */
 	if ((bh->b_data[0] == '#') && (bh->b_data[1] == '!') && (!sh_bang)) {
 		/*
@@ -316,15 +325,20 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
+	// 替换该字段的值
 	if (current->executable)
 		iput(current->executable);
 	current->executable = inode;
+	// 清除信号处理函数
 	for (i=0 ; i<32 ; i++)
 		current->sigaction[i].sa_handler = NULL;
+	// 设置了close_on_exec的则关闭对应的文件
 	for (i=0 ; i<NR_OPEN ; i++)
 		if ((current->close_on_exec>>i)&1)
 			sys_close(i);
+	// 清0
 	current->close_on_exec = 0;
+	// 是否代码段和数据段的页表以及物理页
 	free_page_tables(get_base(current->ldt[1]),get_limit(0x0f));
 	free_page_tables(get_base(current->ldt[2]),get_limit(0x17));
 	if (last_task_used_math == current)
@@ -336,11 +350,13 @@ restart_interp:
 		(current->end_data = ex.a_data +
 		(current->end_code = ex.a_text));
 	current->start_stack = p & 0xfffff000;
+	// 进程的权限，setuid的时候，权限等于可执行文件拥有者的
 	current->euid = e_uid;
 	current->egid = e_gid;
 	i = ex.a_text+ex.a_data;
 	while (i&0xfff)
 		put_fs_byte(0,(char *) (i++));
+	// 设置eip的值，返回后从这开始执行
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	return 0;
