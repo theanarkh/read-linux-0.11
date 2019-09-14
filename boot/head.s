@@ -21,20 +21,28 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-	// 同时给一个段寄存器和一个16位通用寄存器赋值，即用_stack_start内存处的多个字节给esp和ss赋值
+	/*
+		同时给一个段寄存器和一个16位通用寄存器赋值，即用_stack_start内存处的多个字节给esp和ss赋值
+		stack_start在sched.c定义。
+	*/
 	lss _stack_start,%esp
+	// 设置中断向量表
 	call setup_idt
+	// 设置gdt
 	call setup_gdt
+	// 重新设置下面的段寄存器
 	movl $0x10,%eax		# reload all the segment registers
 	mov %ax,%ds		# after changing gdt. CS was already
 	mov %ax,%es		# reloaded in 'setup_gdt'
 	mov %ax,%fs
 	mov %ax,%gs
 	lss _stack_start,%esp
+	// 清0
 	xorl %eax,%eax
 1:	incl %eax		# check that A20 really IS enabled
 	movl %eax,0x000000	# loop forever if it isn't
 	cmpl %eax,0x100000
+	// 等于则跳到1处
 	je 1b
 /*
  * NOTE! 486 should set bit 16, to check for write-protect in supervisor

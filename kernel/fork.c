@@ -97,7 +97,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	// 当前时间
 	p->start_time = jiffies;
 	p->tss.back_link = 0;
-	// 页末
+	// 内核栈，在页末
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
 	// 调用fork时压入栈的ip，子进程创建完成会从这开始执行，即if (__res >= 0) 

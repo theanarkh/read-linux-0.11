@@ -44,13 +44,13 @@ start:
 	mov	[0],dx		! it from 0x90000.
 
 ! Get memory size (extended mem, kB)
-	// 把内存信息存到0x9000:2处
+	// 把拓展内存信息存到0x9000:2处
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax
 
 ! Get video-card data:
-
+	// 显示器的相关信息，显示模式存于 AL 寄存器 ，当前显示页存于 BH 寄存器，总字符行数存于 AH 寄存器。
 	mov	ah,#0x0f
 	int	0x10
 	mov	[4],bx		! bh = display page
