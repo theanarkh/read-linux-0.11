@@ -498,8 +498,8 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	 算出要读的硬盘块号，但是最多读四块。
 	 tmp/BLOCK_SIZE算出线性地址对应页的
 	 页首地址离代码块距离了多少块，然后读取页首
-	 地址对应的块号，所以需要加一。比如距离2块的距离，则
-	 需要读取的块是第三块
+	 地址对应的块号，因为逻辑块号从0开始算，tmp/BLOCK_SIZE则是需要读取的逻辑块号，
+	 因为执行文件头还有一页，所以加上1
 	*/
 	block = 1 + tmp/BLOCK_SIZE;
 	// 查找文件前4块对应的硬盘号
