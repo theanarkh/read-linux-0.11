@@ -304,7 +304,7 @@ void mount_root(void)
 	mi->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
 	// 超级块挂载到了mi对应的inode节点，p->s_isup设置根文件系统的根节点
 	p->s_isup = p->s_imount = mi;
-	// 设置当前进程的根文件目录和当前工作目录
+	// 设置当前进程（进程1）的根文件目录和当前工作目录
 	current->pwd = mi;
 	current->root = mi;
 	free=0;

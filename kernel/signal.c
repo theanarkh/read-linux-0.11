@@ -59,7 +59,7 @@ int sys_signal(int signum, long handler, long restorer)
 	current->sigaction[signum-1] = tmp;
 	return handler;
 }
-
+// 注册信号处理函数
 int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
@@ -68,6 +68,7 @@ int sys_sigaction(int signum, const struct sigaction * action,
 	if (signum<1 || signum>32 || signum==SIGKILL)
 		return -1;
 	tmp = current->sigaction[signum-1];
+	// 设置成新的handler
 	get_new((char *) action,
 		(char *) (signum-1+current->sigaction));
 	if (oldaction)
