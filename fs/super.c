@@ -147,12 +147,14 @@ static struct super_block * read_super(int dev)
 		free_super(s);
 		return NULL;
 	}
+	// 数据块位图和inode节点位图
 	for (i=0;i<I_MAP_SLOTS;i++)
 		s->s_imap[i] = NULL;
 	for (i=0;i<Z_MAP_SLOTS;i++)
 		s->s_zmap[i] = NULL;
+	// 第一个逻辑块是引导扇区，第二个逻辑块是超级块，所以直接从第三个逻辑块开始读
 	block=2;
-	// 读inode和块位图信息,s_imap_blocks块表示inode位图，读进来
+	// 读inode和块位图信息,s_imap_blocks块表示inode位图
 	for (i=0 ; i < s->s_imap_blocks ; i++)
 		if (s->s_imap[i]=bread(dev,block)) // s_imap_blocks > 8时会溢出
 			block++;
