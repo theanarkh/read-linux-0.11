@@ -1,6 +1,8 @@
 # read-linux-0.11
 linux0.11源码解析
 
+文章：https://zhuanlan.zhihu.com/c_1094189343643652096
+
 ### [文件系统源码分析之文件和目录](https://blog.csdn.net/THEANARKH/article/details/86554770)
 ### [重定向标准流到文件](https://blog.csdn.net/THEANARKH/article/details/86619305)
 ### [文件系统源码分析之buffer.c](https://blog.csdn.net/THEANARKH/article/details/86110394)
