@@ -149,7 +149,7 @@ int do_exit(long code)
 	current->exit_code = code;
 	// 通知父进程
 	tell_father(current->father);
-	// 重新调度进程（tell_father里已经调度过了）
+	// 重新调度进程
 	schedule();
 	return (-1);	/* just to suppress warnings */
 }
