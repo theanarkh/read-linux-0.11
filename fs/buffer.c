@@ -409,6 +409,7 @@ struct buffer_head * breada(int dev,int first, ...)
 // 系统初始化的时候执行该函数，主要是建立buffer对应的数据结构，一个双向循环链表
 void buffer_init(long buffer_end)
 {
+	// buffer开始地址
 	struct buffer_head * h = start_buffer;
 	void * b;
 	int i;

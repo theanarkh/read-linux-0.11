@@ -25,6 +25,7 @@
 
 #define READ 0
 #define WRITE 1
+// 预读写
 #define READA 2		/* read-ahead - don't pause */
 #define WRITEA 3	/* "write-ahead" - silly, but somewhat useful */
 
@@ -163,7 +164,7 @@ struct file {
 struct super_block {
 	// inode节点个数
 	unsigned short s_ninodes;
-	// 文件系统占据的硬盘总块数
+	// 数据块占据的逻辑块总块数
 	unsigned short s_nzones;
 	// inode和数据块位图占据的硬盘块数，位图是记录哪个块或者inode节点被使用了
 	unsigned short s_imap_blocks;

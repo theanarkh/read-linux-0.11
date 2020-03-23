@@ -119,9 +119,7 @@ int do_exit(long code)
 			// 子进程的新父进程是进程id为1的进程
 			task[i]->father = 1;
 			/*
-			 如果子进程刚把自己的状态改成TASK_ZOMBIE,执行到tell_father里的代码时，时间片到了，
-			 然后调度父进程执行，这时候父进程退出了，再切换到子进程执行的时候，
-			 子进程给父进程发信号就丢失了，所以这里补充一下这个逻辑，给新的父进程发信号
+			 父进程没有调wait，子进程退出了，然后父进程也退出了。没人回收子进程的pcb，给init进程发
 			*/
 			if (task[i]->state == TASK_ZOMBIE)
 				/* assumption task[1] is always init */
@@ -151,7 +149,7 @@ int do_exit(long code)
 	current->exit_code = code;
 	// 通知父进程
 	tell_father(current->father);
-	// 重新调度进程（tell_father里已经调度过了）
+	// 重新调度进程
 	schedule();
 	return (-1);	/* just to suppress warnings */
 }

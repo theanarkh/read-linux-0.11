@@ -209,7 +209,7 @@ int sys_open(const char * filename,int flag,int mode)
 int sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_TRUNC, mode);
-
+}
 // 解除文件描述符->file结构体->inode的关联
 int sys_close(unsigned int fd)
 {	

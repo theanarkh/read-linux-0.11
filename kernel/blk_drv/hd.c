@@ -161,6 +161,7 @@ int sys_setup(void * BIOS)
 	}
 	if (NR_HD)
 		printk("Partition table%s ok.\n\r",(NR_HD>1)?"s":"");
+	// 虚拟盘初始化
 	rd_load();
 	mount_root();
 	return (0);
@@ -358,7 +359,9 @@ void do_hd_request(void)
 void hd_init(void)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	// 设置硬盘中断处理程序
 	set_intr_gate(0x2E,&hd_interrupt);
+	// 允许硬盘中断
 	outb_p(inb_p(0x21)&0xfb,0x21);
 	outb(inb_p(0xA1)&0xbf,0xA1);
 }
