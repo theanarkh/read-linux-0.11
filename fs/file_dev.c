@@ -40,6 +40,7 @@ int file_read(struct m_inode * inode, struct file * filp, char * buf, int count)
 				put_fs_byte(*(p++),buf++); //复制到buf里 
 			brelse(bh);
 		} else {
+			// 没有数据则复制0
 			while (chars-->0)
 				put_fs_byte(0,buf++);
 		}

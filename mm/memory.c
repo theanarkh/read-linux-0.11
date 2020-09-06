@@ -505,7 +505,7 @@ void do_no_page(unsigned long error_code,unsigned long address)
 	// 查找文件前4块对应的硬盘号
 	for (i=0 ; i<4 ; block++,i++)
 		// bmap算出逻辑块号对应的物理块号
-		nr[i] = bmap(current->executable,block);
+		nr[i] = bmap(current,block);
 	// 从硬盘读四块数据进来，并且复制到物理页中
 	bread_page(page,current->executable->i_dev,nr);
 	/*

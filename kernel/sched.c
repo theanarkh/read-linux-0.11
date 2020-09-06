@@ -413,7 +413,7 @@ void do_timer(long cpl)
 	// 当前进程的可用时间减一，不为0则接着执行，否则可能需要重新调度
 	if ((--current->counter)>0) return;
 	current->counter=0;
-	// 是系统进程则继续执行
+	// 当前特权是0则继续执行
 	if (!cpl) return;
 	// 进程调度
 	schedule();
