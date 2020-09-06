@@ -759,7 +759,7 @@ int sys_unlink(const char * name)
 		brelse(bh);
 		return -EPERM;
 	}
-	// 没进程引用该inode
+	// 为0说明不在文件树中
 	if (!inode->i_nlinks) {
 		printk("Deleting nonexistent file (%04x:%d), %d\n",
 			inode->i_dev,inode->i_num,inode->i_nlinks);
