@@ -1,8 +1,6 @@
 # read-linux-0.11
 linux0.11源码解析
 
-<img src="https://img-blog.csdnimg.cn/20200721120248775.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L1RIRUFOQVJLSA==,size_16,color_FFFFFF,t_70" alt="" width="300" height="300" align="bottom" />
-
 文章：https://zhuanlan.zhihu.com/c_1094189343643652096
 
 ### [文件系统源码分析之文件和目录](https://blog.csdn.net/THEANARKH/article/details/86554770)
