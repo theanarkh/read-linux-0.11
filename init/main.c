@@ -148,7 +148,7 @@ void main(void)		/* This really IS void, no error here. */
 	hd_init();
 	// 软盘初始化
 	floppy_init();
-	// 关中断
+	// 开中断
 	sti();
 	// 
 	move_to_user_mode();
